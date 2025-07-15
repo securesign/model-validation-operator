@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/miyunari/model-validation-controller/api/v1alpha1"
+	"github.com/sigstore/model-validation-controller/api/v1alpha1"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/test"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
