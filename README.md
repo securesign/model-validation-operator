@@ -1,6 +1,6 @@
 # Model Validation Controller
 
-This project is a proof of concept based on the [sigstore/model-transperency-cli](https://github.com/sigstore/model-transparency). It offers a Kubernetes/OpenShift controller designed to validate AI models before they are picked up by actual workload. This project provides a webhook that adds an initcontainer to perform model validation. The controller uses a custom resource to define how the models should be validated, such as utilizing [Sigstore](https://www.sigstore.dev/) or public keys.
+This project is a proof of concept based on the [sigstore/model-transperency-cli](https://github.com/sigstore/model-transparency). It offers a Kubernetes/OpenShift operator designed to validate AI models before they are picked up by actual workload. This project provides a webhook that adds an initcontainer to perform model validation. The operator uses a custom resource to define how the models should be validated, such as utilizing [Sigstore](https://www.sigstore.dev/) or public keys.
 
 ### Features
 
@@ -17,50 +17,90 @@ This project is a proof of concept based on the [sigstore/model-transperency-cli
 
 ### Installation
 
-The controller can be installed in the `model-validation-controller` namespace via [kustomize](https://kustomize.io/).
+The operator can be installed via [kustomize](https://kustomize.io/) using different deployment overlays.
+
+#### Production Deployment
+For production environments with cert-manager integration:
 ```bash
-kubectl apply -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/manifests
+kubectl apply -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/config/overlays/production
 # or local
-kubectl apply -k manifests
+kubectl apply -k config/overlays/production
 ```
 
-Run delete to uninstall the controller.
+#### Testing Deployment
+For testing environments with manual certificate management:
 ```bash
-kubectl delete -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/manifests
+kubectl apply -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/config/overlays/testing
 # or local
-kubectl delete -k manifests
+kubectl apply -k config/overlays/testing
 ```
 
-#### Running the Webhook Server Locally with Self-Signed Certs
-
-The webhook server requires TLS certificates. To run it locally using `make run`, you can generate self-signed certs manually:
-
-```
-mkdir -p /tmp/k8s-webhook-server/serving-certs
-
-openssl req -x509 -newkey rsa:2048 -nodes \
-  -keyout /tmp/k8s-webhook-server/serving-certs/tls.key \
-  -out /tmp/k8s-webhook-server/serving-certs/tls.crt \
-  -subj "/CN=localhost" \
-  -days 365
+#### Development Deployment
+For development environments, deploying the operator without the webhook integration:
+```bash
+kubectl apply -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/config/overlays/development
+# or local
+kubectl apply -k config/overlays/development
 ```
 
-Set the environment variable:
+#### OLM Deployment
+For OpenShift/OLM environments:
+```bash
+kubectl apply -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/config/overlays/olm
+# or local
+kubectl apply -k config/overlays/olm
+```
+
+#### Uninstall
+To uninstall the operator, use the same overlay you used for installation:
+```bash
+kubectl delete -k config/overlays/production
+```
+
+### Configuration Structure
+
+The operator uses a kustomize based, overlay configuration structure, aiming to separate generated content from environment specific content:
 
 ```
-export CERT_DIR=/tmp/k8s-webhook-server/serving-certs
+config/
+├── crd/                      # Custom Resource Definitions
+├── rbac/                     # RBAC permissions
+├── webhook/                  # Webhook configuration
+├── manager/                  # Controller manager deployment
+├── manifests/                # OLM manifests
+├── components/               # Reusable components
+│   ├── webhook/              # Webhook service component
+│   ├── certmanager/          # Certificate manager component
+│   ├── manual-tls/           # Manual TLS configuration
+│   ├── metrics-port/         # Metrics configuration
+│   └── webhook-replacements/ # Webhook configuration replacements
+└── overlays/                 # Environment-specific overlays
+    ├── production/           # Production (cert-manager)
+    ├── development/          # Development (operator only, no webhooks)
+    ├── testing/              # Testing (manual, self-signed certs)
+    └── olm/                  # OpenShift/OLM
 ```
 
-Alternatively, you can add it to your shell config.
+#### Certificate Management
 
-Run the operator:
+The operator supports different certificate management approaches:
 
-```
+1. **Production**: Uses cert-manager for automatic certificate management
+   - **⚠️ Important**: The default cert-manager configuration uses self-signed certificates
+   - For production environments, you should configure cert-manager with a proper CA issuer
+2. **Development**: Does not use certificates, there are no webhook configurations in this overlay
+3. **Testing**: Uses manual, self-signed certificate management for testing scenarios
+4. **OLM**: Uses OLM's built-in certificate management for OpenShift deployments
+
+#### Running the Webhook Server Locally
+
+The webhook server requires TLS certificates. When you run the operator locally, certificates will be generated automatically:
+
+```bash
 make run
 ```
 
-This will start the webhook server on https://localhost:9443 using the generated certs.
-
+This command will start the webhook server on https://localhost:9443, using the generated certs.
 
 ### Known limitations
 
@@ -77,7 +117,7 @@ The project is at an early stage and therefore has some limitations.
 
 First, a ModelValidation CR must be created as follows:
 ```yaml
-apiVersion: rhtas.redhat.com/v1alpha1
+apiVersion: ml.sigstore.dev/v1alpha1
 kind: ModelValidation
 metadata:
   name: demo
@@ -91,7 +131,7 @@ spec:
     signaturePath: /data/tensorflow_saved_model/model.sig
 ```
 
-All pods in the namespace where the custom resource exists that have this label `validation.rhtas.redhat.com/ml: "true"` will be validated.
+All pods in the namespace where the custom resource exists that have this label `validation.ml.sigstore.dev/ml: "true"` will be validated.
 It should be noted that this does not apply to subsequently labeled pods.
 
 ```diff
@@ -100,7 +140,7 @@ kind: Pod
 metadata:
   name: whatever-workload
 +  labels:
-+    validation.rhtas.redhat.com/ml: "true"
++    validation.ml.sigstore.dev/ml: "true"
 spec:
   restartPolicy: Never
   containers:
@@ -119,19 +159,39 @@ spec:
 
 ### Examples
 
-The example folder contains two files `prepare.yaml` and `signed.yaml`.
+The example folder contains example files for testing the operator.
 
-- prepare: contains a persistent volume claim and a job that downloads a signed test model.
+#### Prerequisites for Examples
+
+Before running the examples, create a namespace for testing (separate from the operator namespace):
+
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/sigstore/model-validation-operator/main/examples/prepare.yaml
-# or local
-kubectl apply -f examples/prepare.yaml
+kubectl create namespace testing
 ```
-- signed: contains a model validation manifest for the validation of this model and a demo pod, which is provided with the appropriate label for validation.
+
+**Important**: Do not deploy examples in the operator namespace (e.g., `model-validation-operator-system`). The operator namespace has the label `validation.ml.sigstore.dev/ignore: "true"` which prevents the webhook from processing pods in that namespace.
+
+#### Example Files
+
+- **prepare.yaml**: Contains a persistent volume claim and a job that downloads a signed test model.
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/sigstore/model-validation-operator/main/examples/verify.yaml
+kubectl apply -f https://raw.githubusercontent.com/sigstore/model-validation-operator/main/examples/prepare.yaml -n testing
 # or local
-kubectl apply -f examples/verify.yaml
+kubectl apply -f examples/prepare.yaml -n testing
+```
+
+- **verify.yaml**: Contains a model validation manifest for the validation of this model and a demo pod, which is provided with the appropriate label for validation.
+```bash
+kubectl apply -f https://raw.githubusercontent.com/sigstore/model-validation-operator/main/examples/verify.yaml -n testing
+# or local
+kubectl apply -f examples/verify.yaml -n testing
+```
+
+- **unsigned.yaml**: Contains an example of a pod that would fail validation (for testing purposes).
+```bash
+kubectl apply -f https://raw.githubusercontent.com/sigstore/model-validation-operator/main/examples/unsigned.yaml -n testing
+# or local
+kubectl apply -f examples/unsigned.yaml -n testing
 ```
 
 After the example installation, the logs of the generated job should show a successful download:
@@ -152,13 +212,13 @@ tensorflow_saved_mod 100% |********************************| 8952k  0:00:00 ETA
 ./fingerprint.pb
 ```
 
-The controller logs should show that a pod has been modified:
+The operator logs should show that a pod has been modified:
 ```bash
-$ kubectl logs -n model-validation-controller deploy/model-validation-controller
-time=2025-01-20T22:13:05.051Z level=INFO msg="Starting webhook server on :8080"
-time=2025-01-20T22:13:47.556Z level=INFO msg="new request, path: /webhook"
+$ kubectl logs -n model-validation-operator-system deploy/model-validation-controller-manager
+time=2025-01-20T22:13:05.051Z level=INFO msg="Starting webhook server on :9443"
+time=2025-01-20T22:13:47.556Z level=INFO msg="new request, path: /mutate-v1-pod"
 time=2025-01-20T22:13:47.557Z level=INFO msg="Execute webhook"
-time=2025-01-20T22:13:47.560Z level=INFO msg="Search associated Model Validation CR" pod=whatever-workload namespace=model-validation-controller
+time=2025-01-20T22:13:47.560Z level=INFO msg="Search associated Model Validation CR" pod=whatever-workload namespace=testing
 time=2025-01-20T22:13:47.591Z level=INFO msg="construct args"
 time=2025-01-20T22:13:47.591Z level=INFO msg="found sigstore config"
 ```

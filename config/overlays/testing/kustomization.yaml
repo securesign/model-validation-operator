@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../default
+
+components:
+- ../../components/webhook
+- ../../components/manual-tls
+- ../../components/metrics-port
+- ../../components/webhook-replacements
+
+namespace: model-validation-operator-test
+
+# ConfigMap for webhook configuration
+
+images:
+- name: controller
+  newName: model-validation-operator
+  newTag: testing
+
+patches:
+- path: testing-config.yaml
+- patch: |-
+    - op: add
+      path: /metadata/labels/validation.ml.sigstore.dev~1ignore
+      value: "true"
+  target:
+    kind: Namespace
+configMapGenerator:
+- literals:
+  - service-name=model-validation-webhook
+  - namespace=model-validation-operator-test
+  - dns-name-short=model-validation-webhook.model-validation-operator-test.svc
+  - dns-name-full=model-validation-webhook.model-validation-operator-test.svc.cluster.local
+  name: webhook-config

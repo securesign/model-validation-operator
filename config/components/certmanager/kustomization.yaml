@@ -1,0 +1,54 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+- certificates.yaml
+
+patches:
+- target:
+    kind: Deployment
+    name: controller-manager
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/volumeMounts/-
+      value:
+        mountPath: /tmp/k8s-webhook-server/serving-certs
+        name: cert
+        readOnly: true
+    - op: add
+      path: /spec/template/spec/volumes/-
+      value:
+        name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert
+
+replacements:
+- source:
+    kind: Certificate
+    group: cert-manager.io
+    name: serving-cert
+    fieldPath: metadata.namespace
+  targets:
+  - select:
+      kind: MutatingWebhookConfiguration
+    fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      delimiter: '/'
+      index: 0
+      create: true
+- source:
+    kind: Certificate
+    group: cert-manager.io
+    name: serving-cert
+    fieldPath: metadata.name
+  targets:
+  - select:
+      kind: MutatingWebhookConfiguration
+    fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      delimiter: '/'
+      index: 1
+      create: true

@@ -1,7 +1,7 @@
 # NOTE: For more details check the link below.
 # https://github.com/slsa-framework/oss-na24-slsa-workshop-model-integrity/blob/main/model_signing/readme.md
 ---
-apiVersion: rhtas.redhat.com/v1alpha1
+apiVersion: ml.sigstore.dev/v1alpha1
 kind: ModelValidation
 metadata:
   name: oss-na24-slasa-workshop
@@ -23,7 +23,7 @@ kind: Pod
 metadata:
   name: whatever-workload
   labels:
-    validation.rhtas.redhat.com/ml: "true"
+    validation.ml.sigstore.dev/ml: "true"
 spec:
 #  restartPolicy: Never
   containers:

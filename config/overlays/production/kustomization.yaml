@@ -1,0 +1,54 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../default
+
+components:
+- ../../components/webhook
+- ../../components/certmanager
+- ../../components/metrics-port
+- ../../components/webhook-replacements
+
+namespace: model-validation-operator-system
+
+images:
+- name: controller
+  newName: ghcr.io/sigstore/model-validation-operator
+  newTag: v0.0.1
+
+replicas:
+- count: 2
+  name: controller-manager
+
+patches:
+- path: production-config.yaml
+- patch: |-
+    - op: add
+      path: /metadata/labels/validation.ml.sigstore.dev~1ignore
+      value: "true"
+  target:
+    kind: Namespace
+
+# Production-specific cert-manager CA injection annotation
+replacements:
+- source:
+    fieldPath: data.cert-annotation
+    kind: ConfigMap
+    name: webhook-config
+  targets:
+  - fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      create: true
+    select:
+      kind: MutatingWebhookConfiguration
+# ConfigMap for webhook configuration used by webhook-replacements component
+configMapGenerator:
+- literals:
+  - service-name=model-validation-webhook
+  - namespace=model-validation-operator-system
+  - dns-name-short=model-validation-webhook.model-validation-operator-system.svc
+  - dns-name-full=model-validation-webhook.model-validation-operator-system.svc.cluster.local
+  - cert-annotation=model-validation-operator-system/serving-cert
+  name: webhook-config

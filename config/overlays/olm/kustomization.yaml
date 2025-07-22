@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../manifests
+
+components:
+- ../../components/webhook
+
+namespace: model-validation-operator-system
+
+# Note: OLM manages certificates and volumes automatically
+
+images:
+- name: controller
+  newName: ghcr.io/sigstore/model-validation-operator
+  newTag: v0.0.1
+
+patches:
+- patch: |-
+    - op: add
+      path: /metadata/labels/validation.ml.sigstore.dev~1ignore
+      value: "true"
+  target:
+    kind: Namespace

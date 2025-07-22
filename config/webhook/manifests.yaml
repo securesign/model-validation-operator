@@ -12,7 +12,7 @@ webhooks:
       namespace: system
       path: /mutate-v1-pod
   failurePolicy: Fail
-  name: pods.model-validation.rhtas.redhat.com
+  name: pods.validation.ml.sigstore.dev
   rules:
   - apiGroups:
     - ""

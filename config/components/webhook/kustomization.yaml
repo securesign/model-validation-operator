@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+- ../../webhook
+
+patches:
+- path: webhook-service.yaml
+  target:
+    kind: Service
+    name: model-validation-webhook
+- target:
+    kind: Deployment
+    name: controller-manager
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/ports/-
+      value:
+        containerPort: 9443
+        name: webhook-server
+        protocol: TCP
+- patch: |-
+    - op: add
+      path: /webhooks/0/namespaceSelector
+      value:
+        matchExpressions:
+        - key: "validation.ml.sigstore.dev/ignore"
+          operator: "NotIn"
+          values: ["true"]
+    - op: add
+      path: /webhooks/0/objectSelector
+      value:
+        matchLabels:
+          validation.ml.sigstore.dev/ml: "true"
+  target:
+    kind: MutatingWebhookConfiguration
+    name: mutating-webhook-configuration

@@ -1,0 +1,54 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: model-validation-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: ModelValidation is the Schema for the modelvalidations API
+      displayName: Model Validation
+      kind: ModelValidation
+      name: modelvalidations.ml.sigstore.dev
+      version: v1alpha1
+  description: Model Validation Operator
+  displayName: Model Validation Operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - model signing
+  - signing
+  - ai
+  links:
+  - name: Model Validation Operator
+    url: https://github.com/sigstore/model-validation-operator
+  maintainers:
+  - email: nolear@redhat.com
+    name: Nina Bongartz
+  - email: ryordan@redhat.com
+    name: Rachel Yordan
+  - email: ifont@redhat.com
+    name: Ivan Font
+  maturity: alpha
+  minKubeVersion: 1.24.0
+  provider:
+    name: Sigstore
+  version: 0.0.0

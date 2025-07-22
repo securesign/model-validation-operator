@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.2
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: modelvalidations.ml.sigstore.dev
 spec:
   group: ml.sigstore.dev
@@ -43,18 +43,27 @@ spec:
                 description: Configuration for validation methods.
                 properties:
                   pkiConfig:
+                    description: |-
+                      PkiConfig defines the PKI-based verification configuration
+                      using a certificate authority for validating model signatures
                     properties:
                       certificateAuthority:
                         description: Path to the certificate authority for PKI.
                         type: string
                     type: object
                   privateKeyConfig:
+                    description: |-
+                      PrivateKeyConfig defines the private key verification configuration
+                      for validating model signatures using a local private key
                     properties:
                       keyPath:
                         description: Path to the private key.
                         type: string
                     type: object
                   sigstoreConfig:
+                    description: |-
+                      SigstoreConfig defines the Sigstore verification configuration
+                      for validating model signatures using certificate identity and OIDC issuer
                     properties:
                       certificateIdentity:
                         type: string

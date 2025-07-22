@@ -11,3 +11,7 @@ cover.out
 *~
 .DS_Store
 *.iml
+# Don't include generated manifests
+manifests/*.yaml
+# Don't include generated bundles (will be built in CI/CD at some point)
+bundle/

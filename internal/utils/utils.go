@@ -1,4 +1,5 @@
-package utils
+// Package utils provides utility functions for the model validation operator
+package utils //nolint:revive
 
 import (
 	"flag"
