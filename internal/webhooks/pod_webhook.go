@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sigstore/model-validation-controller/internal/constants"
+	"github.com/sigstore/model-validation-operator/internal/constants"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/go-logr/logr"
-	"github.com/sigstore/model-validation-controller/api/v1alpha1"
+	"github.com/sigstore/model-validation-operator/api/v1alpha1"
 )
 
 // NewPodInterceptor creates a new pod mutating webhook to be registered
@@ -25,10 +25,11 @@ func NewPodInterceptor(c client.Client, decoder admission.Decoder) webhook.Admis
 	}
 }
 
-// +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=fail,groups="",resources=pods,sideEffects=None,verbs=create;update,versions=v1,name=pods.model-validation.rhtas.redhat.com,admissionReviewVersions=v1
+//nolint:lll
+// +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=fail,groups="",resources=pods,sideEffects=None,verbs=create;update,versions=v1,name=pods.validation.ml.sigstore.dev,admissionReviewVersions=v1
 
-// +kubebuilder:rbac:groups=rhtasv1alpha1,resources=ModelValidation,verbs=get;list;watch
-// +kubebuilder:rbac:groups=rhtasv1alpha1,resources=ModelValidation/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ml.sigstore.dev,resources=modelvalidations,verbs=get;list;watch
+// +kubebuilder:rbac:groups=ml.sigstore.dev,resources=modelvalidations/status,verbs=get;update;patch
 
 // podInterceptor extends pods with Model Validation Init-Container if annotation is specified.
 type podInterceptor struct {
@@ -46,10 +47,24 @@ func (p *podInterceptor) Handle(ctx context.Context, req admission.Request) admi
 		logger.Error(err, "failed to decode pod")
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	// TODO: check in webhook config
-	if v := pod.Labels["validation.rhtas.redhat.com/ml"]; v != "true" {
-		return admission.Allowed("no annoation found, no action needed")
+
+	// Check if namespace should be ignored
+	ns := &corev1.Namespace{}
+	if err := p.client.Get(ctx, client.ObjectKey{Name: req.Namespace}, ns); err != nil {
+		logger.Error(err, "failed to get namespace")
+		return admission.Errored(http.StatusInternalServerError, err)
 	}
+	if ns.Labels["validation.ml.sigstore.dev/ignore"] == "true" {
+		logger.Info("Namespace has ignore label, skipping", "namespace", req.Namespace)
+		return admission.Allowed("namespace ignored")
+	}
+
+	logger.Info("Checking pod labels", "labels", pod.Labels)
+	if v := pod.Labels["validation.ml.sigstore.dev/ml"]; v != "true" {
+		logger.Info("Validation label not found or not true", "value", v)
+		return admission.Allowed("no annotation found, no action needed")
+	}
+	logger.Info("Validation label found, proceeding with injection")
 
 	logger.Info("Search associated Model Validation CR", "pod", pod.Name, "namespace", pod.Namespace)
 	rhmvList := &v1alpha1.ModelValidationList{}

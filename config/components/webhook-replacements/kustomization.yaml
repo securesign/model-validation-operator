@@ -1,0 +1,52 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# This component expects overlays to provide a ConfigMap named "webhook-config"
+# with the required webhook configuration values.
+# Overlays should use configMapGenerator to create this ConfigMap.
+
+replacements:
+# Replace service name in webhook configuration
+- source:
+    kind: ConfigMap
+    name: webhook-config
+    fieldPath: data.service-name
+  targets:
+  - select:
+      kind: MutatingWebhookConfiguration
+    fieldPaths:
+    - webhooks.[name=pods.validation.ml.sigstore.dev].clientConfig.service.name
+
+# Replace service namespace in webhook configuration
+- source:
+    kind: ConfigMap
+    name: webhook-config
+    fieldPath: data.namespace
+  targets:
+  - select:
+      kind: MutatingWebhookConfiguration
+    fieldPaths:
+    - webhooks.[name=pods.validation.ml.sigstore.dev].clientConfig.service.namespace
+
+# Replace DNS names in Certificate
+- source:
+    kind: ConfigMap
+    name: webhook-config
+    fieldPath: data.dns-name-short
+  targets:
+  - select:
+      kind: Certificate
+      name: serving-cert
+    fieldPaths:
+    - spec.dnsNames.0
+
+- source:
+    kind: ConfigMap
+    name: webhook-config
+    fieldPath: data.dns-name-full
+  targets:
+  - select:
+      kind: Certificate
+      name: serving-cert
+    fieldPaths:
+    - spec.dnsNames.1

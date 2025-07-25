@@ -29,21 +29,29 @@ type Model struct {
 	SignaturePath string `json:"signaturePath"`
 }
 
+// SigstoreConfig defines the Sigstore verification configuration
+// for validating model signatures using certificate identity and OIDC issuer
 type SigstoreConfig struct {
 	CertificateIdentity   string `json:"certificateIdentity,omitempty"`
 	CertificateOidcIssuer string `json:"certificateOidcIssuer,omitempty"`
 }
 
+// PkiConfig defines the PKI-based verification configuration
+// using a certificate authority for validating model signatures
 type PkiConfig struct {
 	// Path to the certificate authority for PKI.
 	CertificateAuthority string `json:"certificateAuthority,omitempty"`
 }
 
+// PrivateKeyConfig defines the private key verification configuration
+// for validating model signatures using a local private key
 type PrivateKeyConfig struct {
 	// Path to the private key.
 	KeyPath string `json:"keyPath,omitempty"`
 }
 
+// ValidationConfig defines the various methods available for validating model signatures.
+// At least one validation method must be specified.
 type ValidationConfig struct {
 	SigstoreConfig   *SigstoreConfig   `json:"sigstoreConfig,omitempty"`
 	PkiConfig        *PkiConfig        `json:"pkiConfig,omitempty"`

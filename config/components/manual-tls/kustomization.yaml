@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+- tls-secret.yaml
+
+patches:
+- target:
+    kind: Deployment
+    name: controller-manager
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --webhook-cert-path=/etc/admission-webhook/tls
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --webhook-cert-name=tls.crt
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --webhook-cert-key=tls.key
+    - op: add
+      path: /spec/template/spec/containers/0/volumeMounts/-
+      value:
+        mountPath: /etc/admission-webhook/tls
+        name: webhook-certs
+        readOnly: true
+    - op: add
+      path: /spec/template/spec/volumes/-
+      value:
+        name: webhook-certs
+        secret:
+          secretName: example-webhook-tls

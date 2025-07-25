@@ -3,9 +3,10 @@ package webhooks
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"github.com/sigstore/model-validation-controller/api/v1alpha1"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive
+	. "github.com/onsi/gomega"    //nolint:revive
+	"github.com/sigstore/model-validation-operator/api/v1alpha1"
+	"github.com/sigstore/model-validation-operator/internal/constants"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -70,7 +71,7 @@ var _ = Describe("Pod webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      Name,
 					Namespace: Namespace,
-					Labels:    map[string]string{"validation.rhtas.redhat.com/ml": "true"},
+					Labels:    map[string]string{"validation.ml.sigstore.dev/ml": "true"},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -91,13 +92,15 @@ var _ = Describe("Pod webhook", func() {
 			}).Should(Succeed())
 
 			Eventually(
-				func(g Gomega) []corev1.Container {
+				func(_ Gomega) []corev1.Container {
 					Expect(k8sClient.Get(ctx, typeNamespaceName, found)).To(Succeed())
 					return found.Spec.InitContainers
 				},
 			).Should(And(
 				WithTransform(func(containers []corev1.Container) int { return len(containers) }, Equal(1)),
-				WithTransform(func(containers []corev1.Container) string { return containers[0].Image }, Equal("ghcr.io/sigstore/model-transparency-cli:v1.0.1")),
+				WithTransform(
+					func(containers []corev1.Container) string { return containers[0].Image },
+					Equal(constants.ModelTransparencyCliImage)),
 			))
 		})
 	})

@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# This component adds the metrics port to the container
+# Use this in overlays that need the metrics endpoint to be properly exposed
+patches:
+- target:
+    kind: Deployment
+    name: controller-manager
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/ports/-
+      value:
+        containerPort: 8443
+        name: metrics
+        protocol: TCP

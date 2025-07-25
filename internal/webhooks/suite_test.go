@@ -1,20 +1,23 @@
+// Package webhooks provides mutating webhooks for model validation
 package webhooks
 
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
-	"github.com/sigstore/model-validation-controller/api/v1alpha1"
+	"github.com/sigstore/model-validation-operator/api/v1alpha1"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/test"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive
+	. "github.com/onsi/gomega"    //nolint:revive
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -34,6 +37,42 @@ var (
 	cancel    context.CancelFunc
 )
 
+// findBinaryAssetsDirectory locates the kubernetes binaries directory
+// in the bin/k8s directory and returns the path to use with envtest.
+// Expects exactly one directory matching the platform suffix.
+func findBinaryAssetsDirectory() (string, error) {
+	binDir := filepath.Join("..", "..", "bin", "k8s")
+
+	// Check if the directory exists
+	if _, err := os.Stat(binDir); os.IsNotExist(err) {
+		return "", fmt.Errorf("bin/k8s directory does not exist")
+	}
+
+	entries, err := os.ReadDir(binDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to read bin/k8s directory: %w", err)
+	}
+
+	var matchingDirs []string
+	expectedSuffix := fmt.Sprintf("-%s-%s", runtime.GOOS, runtime.GOARCH)
+
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasSuffix(entry.Name(), expectedSuffix) {
+			matchingDirs = append(matchingDirs, entry.Name())
+		}
+	}
+
+	if len(matchingDirs) == 0 {
+		return "", fmt.Errorf("no directories found with suffix %s", expectedSuffix)
+	}
+
+	if len(matchingDirs) > 1 {
+		return "", fmt.Errorf("multiple directories found with suffix %s: %v", expectedSuffix, matchingDirs)
+	}
+
+	return filepath.Join(binDir, matchingDirs[0]), nil
+}
+
 func TestAPIs(t *testing.T) {
 	fs := test.InitKlog(t)
 	_ = fs.Set("v", "5")
@@ -48,21 +87,23 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	By("bootstrapping test environment")
+
+	binaryAssetsDir, err := findBinaryAssetsDirectory()
+	if err != nil {
+		Fail(fmt.Sprintf("Failed to locate Kubernetes binary assets: %v\n"+
+			"Please run 'make setup-envtest' to download the required binaries.", err))
+	}
+
+	By(fmt.Sprintf("Using binary assets directory: %s", binaryAssetsDir))
+
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 
-		// The BinaryAssetsDirectory is only required if you want to run the tests directly
-		// without call the makefile target test. If not informed it will look for the
-		// default path defined in controller-runtime which is /usr/local/kubebuilder/.
-		// Note that you must have the required binaries setup under the bin directory to perform
-		// the tests directly. When we run make test it will be setup and used automatically.
-		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
-			fmt.Sprintf("1.31.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
+		BinaryAssetsDirectory: binaryAssetsDir,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{Paths: []string{filepath.Join("..", "..", "config", "webhook")}},
 	}
 
-	var err error
 	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
