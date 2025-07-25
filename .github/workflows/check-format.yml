@@ -1,0 +1,42 @@
+name: Check Format
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check-format:
+    name: Check go fmt and go mod tidy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run go mod tidy
+        run: go mod tidy
+
+      - name: Run go fmt
+        run: make fmt
+
+      - name: Check for uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "❌ Error: go mod tidy or make fmt caused changes to committed files"
+            echo
+            echo "Please run the following commands locally and commit the changes:"
+            echo "  go mod tidy"
+            echo "  make fmt"
+            echo
+            echo "Changed files:"
+            git status --porcelain
+            echo
+            echo "Diff:"
+            git diff
+            exit 1
+          fi
+          echo "✅ No formatting issues found"
