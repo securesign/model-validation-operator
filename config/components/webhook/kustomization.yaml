@@ -30,8 +30,9 @@ patches:
     - op: add
       path: /webhooks/0/objectSelector
       value:
-        matchLabels:
-          validation.ml.sigstore.dev/ml: "true"
+        matchExpressions:
+        - key: "validation.ml.sigstore.dev/ml"
+          operator: Exists
   target:
     kind: MutatingWebhookConfiguration
     name: mutating-webhook-configuration

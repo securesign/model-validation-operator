@@ -23,7 +23,7 @@ kind: Pod
 metadata:
   name: whatever-workload
   labels:
-    validation.ml.sigstore.dev/ml: "true"
+    validation.ml.sigstore.dev/ml: "oss-na24-slasa-workshop"
 spec:
 #  restartPolicy: Never
   containers:

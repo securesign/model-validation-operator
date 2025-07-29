@@ -108,7 +108,7 @@ The project is at an early stage and therefore has some limitations.
 
 - There is no validation or defaulting for the custom resource.
 - The validation is namespace scoped and cannot be used across multiple namespaces.
-- No more than one validation resource can be used per namespace.
+
 - There are no status fields for the custom resource.
 - The model and signature path must be specified, there is no auto discovery.
 - TLS certificates used by the webhook are self generated.
@@ -131,7 +131,7 @@ spec:
     signaturePath: /data/tensorflow_saved_model/model.sig
 ```
 
-All pods in the namespace where the custom resource exists that have this label `validation.ml.sigstore.dev/ml: "true"` will be validated.
+Pods in the namespace that have the label `validation.ml.sigstore.dev/ml: "<modelvalidation-cr-name>"` will be validated using the specified ModelValidation CR.
 It should be noted that this does not apply to subsequently labeled pods.
 
 ```diff
@@ -140,7 +140,7 @@ kind: Pod
 metadata:
   name: whatever-workload
 +  labels:
-+    validation.ml.sigstore.dev/ml: "true"
++    validation.ml.sigstore.dev/ml: "demo"
 spec:
   restartPolicy: Never
   containers:

@@ -21,7 +21,7 @@ kind: Pod
 metadata:
   name: ollama
   labels:
-    validation.ml.sigstore.dev/ml: "true"
+    validation.ml.sigstore.dev/ml: "example"
 spec:
   containers:
   - name: ollama
