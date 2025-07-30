@@ -42,6 +42,14 @@ var (
 	projectImage = "ghcr.io/sigstore/model-validation-operator:v0.0.1"
 )
 
+const (
+	// operatorNamespace is the namespace where the project is deployed in
+	operatorNamespace = "model-validation-operator-system"
+
+	// webhookTestNamespace is the namespace for webhook tests
+	webhookTestNamespace = "e2e-webhook-test-ns"
+)
+
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
 // temporary environment to validate project changes with the purposed to be used in CI jobs.
 // The default setup requires Kind, builds/loads the Manager Docker image locally, and installs

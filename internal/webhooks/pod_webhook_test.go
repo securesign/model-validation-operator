@@ -71,7 +71,7 @@ var _ = Describe("Pod webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      Name,
 					Namespace: Namespace,
-					Labels:    map[string]string{"validation.ml.sigstore.dev/ml": "true"},
+					Labels:    map[string]string{constants.ModelValidationLabel: Name},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{

@@ -30,6 +30,7 @@ func NewPodInterceptor(c client.Client, decoder admission.Decoder) webhook.Admis
 
 // +kubebuilder:rbac:groups=ml.sigstore.dev,resources=modelvalidations,verbs=get;list;watch
 // +kubebuilder:rbac:groups=ml.sigstore.dev,resources=modelvalidations/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 
 // podInterceptor extends pods with Model Validation Init-Container if annotation is specified.
 type podInterceptor struct {
@@ -54,36 +55,31 @@ func (p *podInterceptor) Handle(ctx context.Context, req admission.Request) admi
 		logger.Error(err, "failed to get namespace")
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
-	if ns.Labels["validation.ml.sigstore.dev/ignore"] == "true" {
+	if ns.Labels[constants.IgnoreNamespaceLabel] == "true" {
 		logger.Info("Namespace has ignore label, skipping", "namespace", req.Namespace)
 		return admission.Allowed("namespace ignored")
 	}
 
 	logger.Info("Checking pod labels", "labels", pod.Labels)
-	if v := pod.Labels["validation.ml.sigstore.dev/ml"]; v != "true" {
-		logger.Info("Validation label not found or not true", "value", v)
-		return admission.Allowed("no annotation found, no action needed")
+	modelValidationName, ok := pod.Labels[constants.ModelValidationLabel]
+	if !ok || modelValidationName == "" {
+		logger.Info("ModelValidation label not found or empty, skipping injection")
+		return admission.Allowed("no ModelValidation label found, no action needed")
 	}
-	logger.Info("Validation label found, proceeding with injection")
+	logger.Info("ModelValidation label found, proceeding with injection", "modelValidationName", modelValidationName)
 
-	logger.Info("Search associated Model Validation CR", "pod", pod.Name, "namespace", pod.Namespace)
-	rhmvList := &v1alpha1.ModelValidationList{}
-	if err := p.client.List(ctx, rhmvList); err != nil {
-		msg := "failed to get the ModelValidation Spec, skipping injection"
+	logger.Info("Search associated Model Validation CR", "pod", pod.Name, "namespace", pod.Namespace,
+		"modelValidationName", modelValidationName)
+	rhmv := &v1alpha1.ModelValidation{}
+	err := p.client.Get(ctx, client.ObjectKey{Name: modelValidationName, Namespace: pod.Namespace}, rhmv)
+	if err != nil {
+		msg := fmt.Sprintf("failed to get the ModelValidation CR %s/%s", pod.Namespace, modelValidationName)
 		logger.Error(err, msg)
-		return admission.Errored(http.StatusNotFound, err)
+		return admission.Errored(http.StatusBadRequest, err) // Fail deployment if CR not found
 	}
-
-	got := len(rhmvList.Items)
-	if got != 1 {
-		err := fmt.Errorf("got no or to many specs, expect: 1, got: %d", got)
-		logger.Error(err, "skip injection")
-		return admission.Errored(http.StatusBadRequest, err)
-	}
-	rhmv := rhmvList.Items[0]
 	// NOTE: check if validation sidecar is already injected. Then no action needed.
 	for _, c := range pod.Spec.InitContainers {
-		if c.Name == modelValidationInitContainerName {
+		if c.Name == constants.ModelValidationInitContainerName {
 			return admission.Allowed("validation exists, no action needed")
 		}
 	}
@@ -98,7 +94,7 @@ func (p *podInterceptor) Handle(ctx context.Context, req admission.Request) admi
 		vm = append(vm, c.VolumeMounts...)
 	}
 	pp.Spec.InitContainers = append(pp.Spec.InitContainers, corev1.Container{
-		Name:            modelValidationInitContainerName,
+		Name:            constants.ModelValidationInitContainerName,
 		ImagePullPolicy: corev1.PullAlways,
 		Image:           constants.ModelTransparencyCliImage,
 		Command:         []string{"/usr/local/bin/model_signing"},
@@ -149,5 +145,3 @@ func validationConfigToArgs(logger logr.Logger, cfg v1alpha1.ValidationConfig, s
 	logger.Info("missing validation config")
 	return []string{}
 }
-
-const modelValidationInitContainerName = "model-validation"
