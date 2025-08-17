@@ -1,4 +1,4 @@
-name: Sign Model Tensorflow Saved Model
+name: Sign model with Sigstore
 
 on:
   workflow_dispatch:
@@ -27,18 +27,20 @@ jobs:
                     "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sigstore" | jq -r '.value')
         echo "OIDC_TOKEN=$token" >> $GITHUB_ENV
 
-    - name: Set up environment and sign model
+    - name: Sign model
       env:
         OIDC_TOKEN: ${{ env.OIDC_TOKEN }}
       run: |
-        docker run --rm -v $(pwd)/testdata/tensorflow_saved_model:/tensorflow_saved_model:z -w /tensorflow_saved_model ghcr.io/sigstore/model-transparency-cli:v1.0.1 sign sigstore --signature="/tensorflow_saved_model/model.sig" --identity_token "$OIDC_TOKEN" /tensorflow_saved_model
+        docker run --rm -v $(pwd)/testdata/tensorflow_saved_model:/tensorflow_saved_model:z -w \
+        /tensorflow_saved_model ghcr.io/sigstore/model-transparency-cli:v1.0.1 sign sigstore \
+        --signature="/tensorflow_saved_model/model.sig" --identity_token "$OIDC_TOKEN" /tensorflow_saved_model
 
-    - name: Create tar.gz of the signed model
+    - name: Create a tarball of the signed model and signature
       run: |
-        tar -czvf signed_model.tar.gz -C $(pwd)/testdata/tensorflow_saved_model .
+        tar -czvf signed_model_bundle.tar.gz -C $(pwd)/testdata/tensorflow_saved_model .
 
-    - name: Upload signed model as artifact
+    - name: Upload signed model artifact
       uses: actions/upload-artifact@v4
       with:
-        name: signed-model
-        path: signed_model.tar.gz
+        name: signed-model-bundle
+        path: signed_model_bundle.tar.gz
