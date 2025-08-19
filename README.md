@@ -1,3 +1,5 @@
+
+
 # Model Validation Controller
 
 This project is a proof of concept based on the [sigstore/model-transperency-cli](https://github.com/sigstore/model-transparency). It offers a Kubernetes/OpenShift operator designed to validate AI models before they are picked up by actual workload. This project provides a webhook that adds an initcontainer to perform model validation. The operator uses a custom resource to define how the models should be validated, such as utilizing [Sigstore](https://www.sigstore.dev/) or public keys.
