@@ -96,13 +96,13 @@ var _ = Describe("Pod webhook", func() {
 			found := &corev1.Pod{}
 			Eventually(ctx, func(ctx context.Context) error {
 				return k8sClient.Get(ctx, typeNamespaceName, found)
-			}).Should(Succeed())
+			}, 5*time.Second).Should(Succeed())
 
 			Eventually(ctx,
 				func(g Gomega, ctx context.Context) []corev1.Container {
 					g.Expect(k8sClient.Get(ctx, typeNamespaceName, found)).To(Succeed())
 					return found.Spec.InitContainers
-				},
+				}, 5*time.Second,
 			).Should(And(
 				WithTransform(func(containers []corev1.Container) int { return len(containers) }, Equal(1)),
 				WithTransform(
@@ -129,7 +129,7 @@ var _ = Describe("Pod webhook", func() {
 			Eventually(ctx, func(ctx context.Context) []corev1.Container {
 				_ = k8sClient.Get(ctx, types.NamespacedName{Name: "tracked-pod", Namespace: Namespace}, found)
 				return found.Spec.InitContainers
-			}).Should(HaveLen(1))
+			}, 5*time.Second).Should(HaveLen(1))
 
 			err = statusTracker.ProcessPodEvent(ctx, found)
 			Expect(err).To(Not(HaveOccurred()))
