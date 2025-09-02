@@ -69,6 +69,16 @@ type PublicKeyConfig struct {
 	KeyPath string `json:"keyPath,omitempty"`
 }
 
+// ClientTrustConfig defines the configuration for client trust settings,
+// used when working with private rekor/fulcio instances.
+type ClientTrustConfig struct {
+	// TrustConfigPath is the path to the trust configuration file.
+	// This specifies the trust configuration needed for using private rekor/fulcio instances
+	// and should conform to the ClientTrustConfig message.
+	// +kubebuilder:validation:Required
+	TrustConfigPath string `json:"trustConfigPath,omitempty"`
+}
+
 // ValidationConfig defines the various methods available for validating model signatures.
 // Only one validation method should be specified. The controller will use the first
 // non-nil method it finds.
@@ -83,6 +93,9 @@ type ValidationConfig struct {
 	// +kubebuilder:validation:Optional
 	// PublicKeyConfig is the configuration for public key-based signature verification.
 	PublicKeyConfig *PublicKeyConfig `json:"publicKeyConfig,omitempty"`
+	// +kubebuilder:validation:Optional
+	// ClientTrustConfig is the configuration for client trust settings.
+	ClientTrustConfig *ClientTrustConfig `json:"clientTrustConfig,omitempty"`
 }
 
 // ModelValidationSpec defines the desired state of ModelValidation
@@ -195,6 +208,11 @@ func (vc *ValidationConfig) GetConfigHash() string {
 	} else if vc.PublicKeyConfig != nil {
 		hasher.Write([]byte("publickey"))
 		hasher.Write([]byte(vc.PublicKeyConfig.KeyPath))
+	}
+
+	if vc.ClientTrustConfig != nil {
+		hasher.Write([]byte("clienttrust"))
+		hasher.Write([]byte(vc.ClientTrustConfig.TrustConfigPath))
 	}
 
 	return fmt.Sprintf("%x", hasher.Sum(nil))[:16] // Use first 16 chars for brevity
