@@ -27,6 +27,8 @@ spec:
     value: bundle.Dockerfile.model-validation.rh
   - name: hermetic
     value: "true"
+  - name: prefetch-input
+    value: '{"type": "generic", "path": "."}'
   - name: build-source-image
     value: "true"
   pipelineRef:
