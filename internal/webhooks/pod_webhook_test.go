@@ -197,7 +197,10 @@ var _ = Describe("Pod webhook", func() {
 			By("Checking that validation sidecar was created with trust config")
 			foundTrustPod := &corev1.Pod{}
 			Eventually(ctx, func(ctx context.Context) []corev1.Container {
-				_ = k8sClient.Get(ctx, types.NamespacedName{Name: "trust-config-pod", Namespace: trustConfigNamespace}, foundTrustPod)
+				_ = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "trust-config-pod",
+					Namespace: trustConfigNamespace,
+				}, foundTrustPod)
 				return foundTrustPod.Spec.InitContainers
 			}, 5*time.Second).Should(HaveLen(1))
 
