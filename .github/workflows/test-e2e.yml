@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+env:
+  MODEL_TRANSPARENCY_IMG: quay.io/securesign/model-transparency@sha256:3c870f9fe54b8c1ad625f7bc54420c8af2d877045d327598bea32e33edd9ee11
+
 permissions:
   contents: read
 
@@ -34,6 +37,9 @@ jobs:
           kubectl wait --for=condition=Ready --namespace=kube-system pod --all --timeout=300s
           echo "Cluster is ready"
 
+      - name: Swap to dev images
+        run: make dev-images
+
       - name: Run E2E tests
         run: |
-          make test-e2e-ci
+          make test-e2e-ci MODEL_TRANSPARENCY_IMG=${{ env.MODEL_TRANSPARENCY_IMG }}

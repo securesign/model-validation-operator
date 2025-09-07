@@ -4,13 +4,27 @@ metadata:
   annotations:
     alm-examples: '[]'
     capabilities: Basic Install
-  name: model-validation-operator.v0.0.0
+    containerImage: placeholder
+    features.operators.openshift.io/cnf: "false"
+    features.operators.openshift.io/cni: "false"
+    features.operators.openshift.io/csi: "false"
+    features.operators.openshift.io/disconnected: "false"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    operators.openshift.io/valid-subscription: '["Red Hat Trusted Artifact Signer"]'
+    repository: https://github.com/securesign/model-validation-operator
+    support: Red Hat
+  name: model-validation-operator.v0.0.1
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: ModelValidation is the Schema for the modelvalidations API
+    - description: ModelValidation is the Schema for the modelvalidations API.
       displayName: Model Validation
       kind: ModelValidation
       name: modelvalidations.ml.sigstore.dev
@@ -47,8 +61,12 @@ spec:
     name: Rachel Yordan
   - email: ifont@redhat.com
     name: Ivan Font
-  maturity: alpha
+  - email: asiek@redhat.com
+    name: Aleksy Siek
+  - email: kconner@redhat.com
+    name: Kevin Conner
+  maturity: tech-preview
   minKubeVersion: 1.24.0
   provider:
-    name: Sigstore
-  version: 0.0.0
+    name: Red Hat
+  version: 0.0.1-techpreview

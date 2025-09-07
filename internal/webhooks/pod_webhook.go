@@ -121,7 +121,7 @@ func (p *podInterceptor) Handle(ctx context.Context, req admission.Request) admi
 		Name:            constants.ModelValidationInitContainerName,
 		ImagePullPolicy: corev1.PullAlways,
 		Image:           constants.ModelTransparencyCliImage,
-		Command:         []string{"/usr/local/bin/model_signing"},
+		Command:         []string{"model_signing"},
 		Args:            args,
 		VolumeMounts:    vm,
 	})

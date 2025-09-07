@@ -23,5 +23,6 @@ const (
 var (
 	// ModelTransparencyCliImage is the default image for the model transparency CLI
 	// used as an init container to validate model signatures
-	ModelTransparencyCliImage = "ghcr.io/sigstore/model-transparency-cli:v1.0.1"
+	ModelTransparencyCliImage = "registry.redhat.io/rhtas/model-transparency-rhel9@" +
+		"sha256:3c870f9fe54b8c1ad625f7bc54420c8af2d877045d327598bea32e33edd9ee11"
 )

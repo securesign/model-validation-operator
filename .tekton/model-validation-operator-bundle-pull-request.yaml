@@ -28,12 +28,18 @@ spec:
     value: 5d
   - name: dockerfile
     value: bundle.Dockerfile.model-validation.rh
+  - name: path-context
+    value: .
   - name: hermetic
     value: "true"
   - name: prefetch-input
     value: '{"type": "generic", "path": "."}'
   - name: build-source-image
     value: "true"
+  - name: manager-pipelinerun-selector
+    value: appstudio.openshift.io/application=model-validation-operator,appstudio.openshift.io/component=model-validation-operator,pipelinesascode.tekton.dev/sha={{revision}},pipelinesascode.tekton.dev/event-type=pull_request
+  - name: manager-registry-url
+    value: registry.redhat.io/rhtas/model-validation-rhel9-operator
   pipelineRef:
     params:
     - name: url
@@ -41,7 +47,7 @@ spec:
     - name: revision
       value: main
     - name: pathInRepo
-      value: pipelines/docker-build-oci-ta.yaml
+      value: pipelines/bundle-build-oci-ta.yaml
     resolver: git
   taskRunTemplate:
     serviceAccountName: build-pipeline-model-validation-operator-bundle
