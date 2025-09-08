@@ -26,6 +26,8 @@ spec:
           mkdir -p /host-data /host-keys
           cp -r /data/* /host-data/
           cp -r /keys/* /host-keys/
+          find /host-data /host-keys -type d -exec chmod 755 {} + 
+          find /host-data /host-keys -type f -exec chmod 644 {} +
           echo "Model data setup complete on node $NODE_NAME"
           # Keep running so DaemonSet stays active
           sleep infinity

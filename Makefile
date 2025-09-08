@@ -99,6 +99,12 @@ help: ## Display this help.
 
 ##@ Development
 
+# Switch images from `registry.redhat.io` images to the dev images
+.PHONY: dev-images
+dev-images:
+	sed -E -i 's#registry.redhat.io/rhtas/model-transparency-rhel9#quay.io/securesign/model-transparency#g' \
+		internal/constants/images.go
+
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
@@ -453,9 +459,9 @@ e2e-sign-test-model: e2e-generate-test-keys
 	$(CONTAINER_TOOL) run --rm \
 		-v $(PWD)/testdata/tensorflow_saved_model:/model \
 		-v $(PWD)/testdata/docker/test_private_key.priv:/test_private_key.priv \
-		--entrypoint="" \
-		ghcr.io/sigstore/model-transparency-cli:v1.0.1 \
-		/usr/local/bin/model_signing sign key /model \
+		--entrypoint "" \
+		$(MODEL_TRANSPARENCY_IMG) \
+		model_signing sign key /model \
 		--private_key /test_private_key.priv \
 		--signature /model/model.sig
 
@@ -490,8 +496,6 @@ e2e-load-images: e2e-build-image e2e-build-test-model
 	$(CONTAINER_TOOL) pull $(MODEL_TRANSPARENCY_IMG)
 	@echo "Loading manager image into Kind cluster..."
 	$(KIND) load docker-image -n $(KIND_CLUSTER) $(IMG)
-	@echo "Loading model-transparency-cli image into Kind cluster..."  
-	$(KIND) load docker-image -n $(KIND_CLUSTER) $(MODEL_TRANSPARENCY_IMG)
 	@echo "Loading test model image into Kind cluster..."
 	$(KIND) load docker-image -n $(KIND_CLUSTER) $(E2E_TEST_MODEL)
 
