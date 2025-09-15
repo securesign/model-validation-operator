@@ -24,5 +24,5 @@ var (
 	// ModelTransparencyCliImage is the default image for the model transparency CLI
 	// used as an init container to validate model signatures
 	ModelTransparencyCliImage = "registry.redhat.io/rhtas/model-transparency-rhel9@" +
-		"sha256:3c870f9fe54b8c1ad625f7bc54420c8af2d877045d327598bea32e33edd9ee11"
+		"sha256:92f6bac037aa93424c113a8581770095787f8742ea319f9a4a6c7e25950814d4"
 )
