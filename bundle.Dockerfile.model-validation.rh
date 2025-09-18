@@ -1,6 +1,7 @@
 ARG VERSION="0.0.1"
 ARG CHANNELS="tech-preview"
 ARG DEFAULT_CHANNEL="tech-preview"
+ARG BUNDLE_OVERLAY="olm"
 ARG BUNDLE_GEN_FLAGS="-q --overwrite=false --version $VERSION --channels=$CHANNELS --default-channel=$DEFAULT_CHANNEL"
 ARG IMG
 
@@ -8,6 +9,7 @@ FROM registry.redhat.io/openshift4/ose-operator-sdk-rhel9@sha256:c466d80c1eab6eb
 
 ARG BUNDLE_GEN_FLAGS
 ARG IMG
+ARG BUNDLE_OVERLAY
 
 WORKDIR /tmp
 
