@@ -29,7 +29,8 @@ CSV="bundle/manifests/model-validation-operator.clusterserviceversion.yaml"
 if [[ -f "${CSV}" ]]; then
   sed -i.bak  's/deploymentName: webhook/deploymentName: model-validation-controller-manager/' "${CSV}"
   sed -i.bak2 's/deploymentName: model-validation-controller-manager/deploymentName: model-validation-controller-manager\
-    serviceName: model-validation-webhook/' "${CSV}"
+    serviceName: model-validation-webhook\
+    containerPort: 9443/' "${CSV}"
   rm -f "${CSV}.bak" "${CSV}.bak2"
 fi
 
