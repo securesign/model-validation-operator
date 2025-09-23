@@ -35,6 +35,6 @@ LABEL io.k8s.display-name="Model validation operator container image for Red Hat
 LABEL io.openshift.tags="model-validation, Red Hat Trusted Artifact Signer."
 LABEL summary="Operator for the model-validation operator."
 LABEL com.redhat.component="model-validation-operator"
-LABEL name="model-validation-rhel9-operator"
+LABEL name="rhtas/model-validation-rhel9-operator"
 
 ENTRYPOINT ["/manager"]
