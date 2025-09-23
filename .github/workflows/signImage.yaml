@@ -1,0 +1,34 @@
+name: Sign model with Sigstore
+
+on:
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  sign_model:
+    # https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # This is required for requesting the JWT
+      contents: read  # This is required for actions/checkout
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Get OIDC Token
+      id: oidc-token
+      run: |
+        # Generate the OIDC token with a specific audience
+        token=$(curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                    "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sigstore" | jq -r '.value')
+        echo "OIDC_TOKEN=$token" >> $GITHUB_ENV
+
+    - name: Sign model
+      env:
+        OIDC_TOKEN: ${{ env.OIDC_TOKEN }}
+      run: |
+        docker run --rm -v $(pwd)/testdata/tensorflow_saved_model:/tensorflow_saved_model:z -w \
+        /tensorflow_saved_model quay.io/securesign/model-transparency:v1.3 sign sigstore \
+        --signature="/tensorflow_saved_model/model.sig" --identity_token "$OIDC_TOKEN" /tensorflow_saved_model
