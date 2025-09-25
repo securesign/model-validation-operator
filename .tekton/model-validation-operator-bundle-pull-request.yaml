@@ -26,7 +26,7 @@ spec:
   - name: image-expires-after
     value: 5d
   - name: dockerfile
-    value: bundle.Dockerfile.model-validation.rh
+    value: Dockerfile.model-validation-bundle.rh
   - name: path-context
     value: .
   - name: hermetic
@@ -36,7 +36,7 @@ spec:
   - name: build-source-image
     value: "true"
   - name: manager-pipelinerun-selector
-    value: appstudio.openshift.io/application=model-validation-operator,appstudio.openshift.io/component=model-validation-operator,pipelinesascode.tekton.dev/sha={{revision}},pipelinesascode.tekton.dev/event-type=pull_request
+    value: "appstudio.openshift.io/application=model-validation-operator,appstudio.openshift.io/component=model-validation-operator,pipelinesascode.tekton.dev/sha={{revision}},pipelinesascode.tekton.dev/event-type in (pull_request,retest-all-comment)"
   - name: manager-registry-url
     value: registry.redhat.io/rhtas/model-validation-rhel9-operator
   pipelineRef:
