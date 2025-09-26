@@ -23,7 +23,7 @@ spec:
   - name: output-image
     value: quay.io/securesign/model-validation-operator-bundle:{{revision}}
   - name: dockerfile
-    value: bundle.Dockerfile.model-validation.rh
+    value: Dockerfile.model-validation-bundle.rh
   - name: hermetic
     value: "true"
   - name: prefetch-input
@@ -39,7 +39,7 @@ spec:
     - name: url
       value: https://github.com/securesign/pipelines.git
     - name: revision
-      value: main
+      value: update-results-name-for-get-manager-image
     - name: pathInRepo
       value: pipelines/bundle-build-oci-ta.yaml
     resolver: git
