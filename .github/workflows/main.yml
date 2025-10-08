@@ -1,0 +1,33 @@
+name: Validate Model Validation Operator
+
+# on:
+#   workflow_dispatch:
+#   push:
+#     branches: [ "main", "test*" ]
+#     tags: [ "*" ]
+#   pull_request:
+#     branches: [ "main", "test*" ]
+
+on:
+  push:
+    branches: [ "test*" ]
+  pull_request:
+    branches: [ "test*" ]
+
+
+jobs:
+  run-unit-tests:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Running Tests
+        run: |
+          make test
