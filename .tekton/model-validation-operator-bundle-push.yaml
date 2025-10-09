@@ -6,14 +6,14 @@ metadata:
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch == "main"
+    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch == "test-e2e-pipeline"
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: model-validation-operator
     appstudio.openshift.io/component: model-validation-operator-bundle
     pipelines.appstudio.openshift.io/type: build
   name: model-validation-operator-bundle-on-push
-  namespace: rhtas-tenant
+  namespace: sacm
 spec:
   params:
   - name: git-url
