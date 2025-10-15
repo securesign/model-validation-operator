@@ -1,0 +1,8 @@
+resources:
+- ../../default
+
+patches:
+  - path: manager_openshift_patch.yaml
+    target:
+      kind: Deployment
+      name: controller-manager
