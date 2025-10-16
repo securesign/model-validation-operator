@@ -8,7 +8,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: model-validation-webhook # model-validation-webhook
+      name: webhook-service
       namespace: system
       path: /mutate-v1-pod
   failurePolicy: Fail
