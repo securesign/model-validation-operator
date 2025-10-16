@@ -1,10 +1,33 @@
+# resources:
+# - ../../default
+
+# patches:
+#   - path: manager_openshift_patch.yaml
+#     target:
+#       kind: Deployment
+#       name: controller-manager
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
 resources:
-- ../../default
+- ../../manifests
+
+components:
+- ../../components/webhook
+
+namespace: model-validation-operator-system
+
+# Note: OLM manages certificates and volumes automatically
+
+images:
+- name: controller
+  newName: ghcr.io/sigstore/model-validation-operator
+  newTag: v0.0.1
 
 patches:
-  - path: manager_openshift_patch.yaml
-    target:
-      kind: Deployment
-      name: controller-manager
-
-      
+- patch: |-
+    - op: add
+      path: /metadata/labels/validation.ml.sigstore.dev~1ignore
+      value: "true"
+  target:
+    kind: Namespace
