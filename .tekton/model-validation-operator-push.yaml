@@ -40,7 +40,7 @@ spec:
     - name: url
       value: https://github.com/securesign/pipelines.git
     - name: revision
-      value: mvo-e2e-pipeline
+      value: mvo-e2e
     - name: pathInRepo
       value: pipelines/docker-build-multi-platform-oci-ta.yaml
     resolver: git
