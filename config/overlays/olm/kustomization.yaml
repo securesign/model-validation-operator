@@ -23,4 +23,3 @@ patches:
       value: "true"
   target:
     kind: Namespace
-     
