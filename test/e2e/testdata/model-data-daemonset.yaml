@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: model-data-setup
-  namespace: e2e-webhook-test-ns
   labels:
     app: model-data-setup
 spec:
@@ -14,45 +13,46 @@ spec:
       labels:
         app: model-data-setup
     spec:
+      serviceAccountName: model-data-setup
+      terminationGracePeriodSeconds: 5
       containers:
-      - name: model-setup
-        image: model-validation-test-model:latest
-        imagePullPolicy: Never
-        command: 
-        - sh
-        - -c
-        - |
-          echo "Setting up model data on node $NODE_NAME..."
-          mkdir -p /host-data /host-keys
-          cp -r /data/* /host-data/
-          cp -r /keys/* /host-keys/
-          find /host-data /host-keys -type d -exec chmod 755 {} + 
-          find /host-data /host-keys -type f -exec chmod 644 {} +
-          echo "Model data setup complete on node $NODE_NAME"
-          # Keep running so DaemonSet stays active
-          sleep infinity
-        env:
-        - name: NODE_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: spec.nodeName
-        volumeMounts:
-        - name: host-model-data
-          mountPath: /host-data
-        - name: host-keys-data
-          mountPath: /host-keys
-        securityContext:
-          runAsNonRoot: false
-          runAsUser: 0
+        - name: model-setup
+          image: model-validation-test-model:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh","-c"]
+          args:
+            - |
+              echo "Setting up model data on node ${NODE_NAME}..."
+              mkdir -p /host-data /host-keys
+              cp -r /data/* /host-data/ 2>/dev/null || true
+              cp -r /keys/* /host-keys/ 2>/dev/null || true
+              find /host-data /host-keys -type d -exec chmod 755 {} + || true
+              find /host-data /host-keys -type f -exec chmod 644 {} + || true
+              echo "Model data setup complete on node ${NODE_NAME}"
+              # Keep running so DaemonSet stays active
+              sleep infinity
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: host-model-data
+              mountPath: /host-data
+            - name: host-keys-data
+              mountPath: /host-keys
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
       volumes:
-      - name: host-model-data
-        hostPath:
-          path: /tmp/e2e-model-data
-          type: DirectoryOrCreate
-      - name: host-keys-data
-        hostPath:
-          path: /tmp/e2e-keys-data
-          type: DirectoryOrCreate
+        - name: host-model-data
+          hostPath:
+            path: /tmp/e2e-model-data
+            type: DirectoryOrCreate
+        - name: host-keys-data
+          hostPath:
+            path: /tmp/e2e-keys-data
+            type: DirectoryOrCreate
       tolerations:
-      - operator: Exists
-        effect: NoSchedule
+        - operator: Exists
+          effect: NoSchedule
