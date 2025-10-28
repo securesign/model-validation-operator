@@ -23,11 +23,14 @@ spec:
           args:
             - |
               echo "Setting up model data on node ${NODE_NAME}..."
-              mkdir -p /host-data /host-keys
-              cp -r /data/* /host-data/ 2>/dev/null || true
-              cp -r /keys/* /host-keys/ 2>/dev/null || true
-              find /host-data /host-keys -type d -exec chmod 755 {} + || true
-              find /host-data /host-keys -type f -exec chmod 644 {} + || true
+              mkdir -p /data /keys
+              cp -r /data/* /data/ 2>/dev/null || true
+              cp -r /keys/* /keys/ 2>/dev/null || true
+              find /data /keys -type d -exec chmod 755 {} + || true
+              find /data /keys -type f -exec chmod 644 {} + || true
+              echo "After copy:"
+              ls -l /data || true
+              ls -l /keys || true
               echo "Model data setup complete on node ${NODE_NAME}"
               # Keep running so DaemonSet stays active
               sleep infinity
@@ -37,19 +40,19 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
           volumeMounts:
-            - name: host-model-data
-              mountPath: /host-data
-            - name: host-keys-data
-              mountPath: /host-keys
+            - name: model-data
+              mountPath: /data
+            - name: keys-data
+              mountPath: /keys
           securityContext:
             seccompProfile:
               type: RuntimeDefault
       volumes:
-        - name: host-model-data
+        - name: model-data
           hostPath:
             path: /tmp/e2e-model-data
             type: DirectoryOrCreate
-        - name: host-keys-data
+        - name: keys-data
           hostPath:
             path: /tmp/e2e-keys-data
             type: DirectoryOrCreate
