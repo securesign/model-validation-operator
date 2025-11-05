@@ -131,6 +131,28 @@ spec:
               model:
                 description: Model details.
                 properties:
+                  allowSymlinks:
+                    description: |-
+                      AllowSymlinks specifies whether to follow symbolic links during verification.
+                      When set to true, symlinks will be followed and their targets verified.
+                    type: boolean
+                  ignoreGitPaths:
+                    description: |-
+                      IgnoreGitPaths specifies whether to ignore git-related files during verification.
+                      When set to true, git files (e.g., .git/, .gitignore) will be excluded.
+                    type: boolean
+                  ignorePaths:
+                    description: |-
+                      IgnorePaths is a list of file paths to ignore when verifying the model.
+                      These paths will be excluded from the verification process.
+                    items:
+                      type: string
+                    type: array
+                  ignoreUnsignedFiles:
+                    description: |-
+                      IgnoreUnsignedFiles specifies whether to ignore files that were not originally signed.
+                      When set to true, unsigned files will not cause verification to fail.
+                    type: boolean
                   path:
                     description: |-
                       Path to the model artifact. This could be a file path on a shared volume
