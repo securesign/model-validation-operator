@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sigstore/model-validation-operator/internal/constants"
@@ -99,9 +101,11 @@ func (p *podInterceptor) Handle(ctx context.Context, req admission.Request) admi
 		}
 	}
 
+	mergedModel := mergeModelWithAnnotations(logger, mv.Spec.Model, pod.Annotations)
+
 	args := []string{"verify"}
-	args = append(args, validationConfigToArgs(logger, mv.Spec.Config, mv.Spec.Model.SignaturePath)...)
-	args = append(args, mv.Spec.Model.Path)
+	args = append(args, validationConfigToArgs(logger, mv.Spec.Config, mergedModel)...)
+	args = append(args, mergedModel.Path)
 
 	pp := pod.DeepCopy()
 
@@ -133,14 +137,14 @@ func (p *podInterceptor) Handle(ctx context.Context, req admission.Request) admi
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
-func validationConfigToArgs(logger logr.Logger, cfg v1alpha1.ValidationConfig, signaturePath string) []string {
+func validationConfigToArgs(logger logr.Logger, cfg v1alpha1.ValidationConfig, model v1alpha1.Model) []string {
 	logger.Info("construct args")
 	res := []string{}
 	if cfg.SigstoreConfig != nil {
 		logger.Info("found sigstore config")
 		res = append(res,
 			"sigstore",
-			fmt.Sprintf("--signature=%s", signaturePath),
+			fmt.Sprintf("--signature=%s", model.SignaturePath),
 			"--identity", cfg.SigstoreConfig.CertificateIdentity,
 			"--identity_provider", cfg.SigstoreConfig.CertificateOidcIssuer,
 		)
@@ -148,14 +152,14 @@ func validationConfigToArgs(logger logr.Logger, cfg v1alpha1.ValidationConfig, s
 		logger.Info("found public-key config")
 		res = append(res,
 			"key",
-			fmt.Sprintf("--signature=%s", signaturePath),
+			fmt.Sprintf("--signature=%s", model.SignaturePath),
 			"--public_key", cfg.PublicKeyConfig.KeyPath,
 		)
 	} else if cfg.PkiConfig != nil {
 		logger.Info("found pki config")
 		res = append(res,
 			"certificate",
-			fmt.Sprintf("--signature=%s", signaturePath),
+			fmt.Sprintf("--signature=%s", model.SignaturePath),
 			"--certificate_chain", cfg.PkiConfig.CertificateAuthority,
 		)
 	} else {
@@ -166,5 +170,73 @@ func validationConfigToArgs(logger logr.Logger, cfg v1alpha1.ValidationConfig, s
 	if cfg.ClientTrustConfig != nil {
 		res = append(res, "--trust_config", cfg.ClientTrustConfig.TrustConfigPath)
 	}
+
+	for _, ignorePath := range model.IgnorePaths {
+		res = append(res, "--ignore-paths", ignorePath)
+	}
+
+	if model.IgnoreGitPaths != nil {
+		if *model.IgnoreGitPaths {
+			res = append(res, "--ignore-git-paths")
+		} else {
+			res = append(res, "--no-ignore-git-paths")
+		}
+	}
+
+	if model.IgnoreUnsignedFiles != nil {
+		if *model.IgnoreUnsignedFiles {
+			res = append(res, "--ignore_unsigned_files")
+		} else {
+			res = append(res, "--no-ignore_unsigned_files")
+		}
+	}
+
+	if model.AllowSymlinks != nil && *model.AllowSymlinks {
+		res = append(res, "--allow_symlinks")
+	}
+
 	return res
+}
+
+// parseBoolAnnotation is a helper function to parse boolean annotations.
+// It returns the parsed value and true if the annotation exists and was successfully parsed,
+// otherwise returns nil, false.
+func parseBoolAnnotation(logger logr.Logger, annotations map[string]string, key, name string) (*bool, bool) {
+	if valStr, ok := annotations[key]; ok {
+		val, err := strconv.ParseBool(valStr)
+		if err == nil {
+			return &val, true
+		}
+		logger.Error(err, "Failed to parse "+name+" annotation", "value", valStr)
+	}
+	return nil, false
+}
+
+// mergeModelWithAnnotations merges Model settings from ModelValidation CR with pod annotations.
+// Pod annotations take precedence over CR settings.
+func mergeModelWithAnnotations(logger logr.Logger, model v1alpha1.Model, annotations map[string]string) v1alpha1.Model {
+	if ignorePathsStr, ok := annotations[constants.IgnorePathsAnnotationKey]; ok && ignorePathsStr != "" {
+		logger.Info("Found ignore-paths annotation", "value", ignorePathsStr)
+		paths := strings.Split(ignorePathsStr, ",")
+		for i := range paths {
+			paths[i] = strings.TrimSpace(paths[i])
+		}
+		model.IgnorePaths = paths
+	}
+
+	if val, ok := parseBoolAnnotation(logger, annotations, constants.IgnoreGitPathsAnnotationKey, "ignore-git-paths"); ok {
+		model.IgnoreGitPaths = val
+	}
+
+	val, ok := parseBoolAnnotation(
+		logger, annotations, constants.IgnoreUnsignedFilesAnnotationKey, "ignore-unsigned-files")
+	if ok {
+		model.IgnoreUnsignedFiles = val
+	}
+
+	if val, ok := parseBoolAnnotation(logger, annotations, constants.AllowSymlinksAnnotationKey, "allow-symlinks"); ok {
+		model.AllowSymlinks = val
+	}
+
+	return model
 }

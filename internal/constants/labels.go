@@ -36,6 +36,22 @@ const (
 	// ConfigHashAnnotationKey is the annotation key used to track the configuration hash during injection
 	ConfigHashAnnotationKey = ModelValidationDomain + "/config-hash"
 
+	// IgnorePathsAnnotationKey is the annotation key used to specify paths to ignore during verification
+	// Value should be a comma-separated list of paths
+	IgnorePathsAnnotationKey = ModelValidationDomain + "/ignore-paths"
+
+	// IgnoreGitPathsAnnotationKey is the annotation key used to specify whether to ignore git-related files
+	// Value should be "true" or "false"
+	IgnoreGitPathsAnnotationKey = ModelValidationDomain + "/ignore-git-paths"
+
+	// IgnoreUnsignedFilesAnnotationKey is the annotation key used to specify whether to ignore unsigned files
+	// Value should be "true" or "false"
+	IgnoreUnsignedFilesAnnotationKey = ModelValidationDomain + "/ignore-unsigned-files"
+
+	// AllowSymlinksAnnotationKey is the annotation key used to specify whether to allow symlinks
+	// Value should be "true" or "false"
+	AllowSymlinksAnnotationKey = ModelValidationDomain + "/allow-symlinks"
+
 	// IgnoreNamespaceValue is the value for the ignore namespace label
 	IgnoreNamespaceValue = "true"
 )

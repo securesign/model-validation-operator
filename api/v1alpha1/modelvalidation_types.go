@@ -35,6 +35,22 @@ type Model struct {
 	// This is used by the various validation methods to verify the model's integrity.
 	// +kubebuilder:validation:Pattern=`^(/|s3://|gs://|https?://)`
 	SignaturePath string `json:"signaturePath"`
+	// IgnorePaths is a list of file paths to ignore when verifying the model.
+	// These paths will be excluded from the verification process.
+	// +kubebuilder:validation:Optional
+	IgnorePaths []string `json:"ignorePaths,omitempty"`
+	// IgnoreGitPaths specifies whether to ignore git-related files during verification.
+	// When set to true, git files (e.g., .git/, .gitignore) will be excluded.
+	// +kubebuilder:validation:Optional
+	IgnoreGitPaths *bool `json:"ignoreGitPaths,omitempty"`
+	// IgnoreUnsignedFiles specifies whether to ignore files that were not originally signed.
+	// When set to true, unsigned files will not cause verification to fail.
+	// +kubebuilder:validation:Optional
+	IgnoreUnsignedFiles *bool `json:"ignoreUnsignedFiles,omitempty"`
+	// AllowSymlinks specifies whether to follow symbolic links during verification.
+	// When set to true, symlinks will be followed and their targets verified.
+	// +kubebuilder:validation:Optional
+	AllowSymlinks *bool `json:"allowSymlinks,omitempty"`
 }
 
 // SigstoreConfig defines the configuration for validating model signatures using
