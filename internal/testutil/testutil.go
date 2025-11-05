@@ -23,17 +23,21 @@ const DefaultNamespace = "default"
 
 // TestModelValidationOptions holds configuration for creating test ModelValidation resources
 type TestModelValidationOptions struct {
-	Name              string
-	Namespace         string
-	DeletionTimestamp *metav1.Time
-	Finalizers        []string
-	ConfigType        string
-	CertificateCA     string
-	CertIdentity      string
-	CertOidcIssuer    string
-	ModelPath         string
-	SignaturePath     string
-	TrustConfigPath   string
+	Name                string
+	Namespace           string
+	DeletionTimestamp   *metav1.Time
+	Finalizers          []string
+	ConfigType          string
+	CertificateCA       string
+	CertIdentity        string
+	CertOidcIssuer      string
+	ModelPath           string
+	SignaturePath       string
+	TrustConfigPath     string
+	IgnorePaths         []string
+	IgnoreGitPaths      *bool
+	IgnoreUnsignedFiles *bool
+	AllowSymlinks       *bool
 }
 
 // TestPodOptions holds configuration for creating test Pod resources
@@ -74,8 +78,12 @@ func CreateTestModelValidation(opts TestModelValidationOptions) *v1alpha1.ModelV
 		},
 		Spec: v1alpha1.ModelValidationSpec{
 			Model: v1alpha1.Model{
-				Path:          opts.ModelPath,
-				SignaturePath: opts.SignaturePath,
+				Path:                opts.ModelPath,
+				SignaturePath:       opts.SignaturePath,
+				IgnorePaths:         opts.IgnorePaths,
+				IgnoreGitPaths:      opts.IgnoreGitPaths,
+				IgnoreUnsignedFiles: opts.IgnoreUnsignedFiles,
+				AllowSymlinks:       opts.AllowSymlinks,
 			},
 		},
 	}

@@ -228,6 +228,74 @@ var _ = Describe("ModelValidation", func() {
 				Expect(updated.Spec.Config.PkiConfig).ToNot(BeNil())
 				Expect(updated.Spec.Config.PkiConfig.CertificateAuthority).To(Equal("new-ca-path"))
 			})
+
+			It("accepts Model with ignore options fields", func() {
+				ignoreGitPaths := true
+				ignoreUnsignedFiles := false
+				allowSymlinks := true
+
+				created := generateSigstoreObject("model-ignore-options")
+				created.Spec.Model.IgnorePaths = []string{"/tmp", "/cache"}
+				created.Spec.Model.IgnoreGitPaths = &ignoreGitPaths
+				created.Spec.Model.IgnoreUnsignedFiles = &ignoreUnsignedFiles
+				created.Spec.Model.AllowSymlinks = &allowSymlinks
+
+				Expect(k8sClient.Create(context.Background(), created)).To(Succeed())
+
+				fetched := &ModelValidation{}
+				Expect(k8sClient.Get(context.Background(), getKey(created), fetched)).To(Succeed())
+				Expect(fetched.Spec.Model.IgnorePaths).To(Equal([]string{"/tmp", "/cache"}))
+				Expect(fetched.Spec.Model.IgnoreGitPaths).ToNot(BeNil())
+				Expect(*fetched.Spec.Model.IgnoreGitPaths).To(BeTrue())
+				Expect(fetched.Spec.Model.IgnoreUnsignedFiles).ToNot(BeNil())
+				Expect(*fetched.Spec.Model.IgnoreUnsignedFiles).To(BeFalse())
+				Expect(fetched.Spec.Model.AllowSymlinks).ToNot(BeNil())
+				Expect(*fetched.Spec.Model.AllowSymlinks).To(BeTrue())
+			})
+
+			It("accepts Model without ignore options fields (backward compatibility)", func() {
+				created := generateSigstoreObject("model-no-ignore-options")
+				Expect(k8sClient.Create(context.Background(), created)).To(Succeed())
+
+				fetched := &ModelValidation{}
+				Expect(k8sClient.Get(context.Background(), getKey(created), fetched)).To(Succeed())
+				Expect(fetched.Spec.Model.IgnorePaths).To(BeNil())
+				Expect(fetched.Spec.Model.IgnoreGitPaths).To(BeNil())
+				Expect(fetched.Spec.Model.IgnoreUnsignedFiles).To(BeNil())
+				Expect(fetched.Spec.Model.AllowSymlinks).To(BeNil())
+			})
+
+			It("allows updating ignore options fields", func() {
+				created := generateSigstoreObject("model-update-ignore-options")
+				Expect(k8sClient.Create(context.Background(), created)).To(Succeed())
+
+				fetched := &ModelValidation{}
+				Expect(k8sClient.Get(context.Background(), getKey(created), fetched)).To(Succeed())
+
+				Expect(fetched.Spec.Model.IgnorePaths).To(BeNil())
+				Expect(fetched.Spec.Model.IgnoreGitPaths).To(BeNil())
+				Expect(fetched.Spec.Model.IgnoreUnsignedFiles).To(BeNil())
+				Expect(fetched.Spec.Model.AllowSymlinks).To(BeNil())
+
+				ignoreGitPaths := false
+				ignoreUnsignedFiles := true
+				allowSymlinks := false
+				fetched.Spec.Model.IgnorePaths = []string{"/opt/test"}
+				fetched.Spec.Model.IgnoreGitPaths = &ignoreGitPaths
+				fetched.Spec.Model.IgnoreUnsignedFiles = &ignoreUnsignedFiles
+				fetched.Spec.Model.AllowSymlinks = &allowSymlinks
+				Expect(k8sClient.Update(context.Background(), fetched)).To(Succeed())
+
+				updated := &ModelValidation{}
+				Expect(k8sClient.Get(context.Background(), getKey(created), updated)).To(Succeed())
+				Expect(updated.Spec.Model.IgnorePaths).To(Equal([]string{"/opt/test"}))
+				Expect(updated.Spec.Model.IgnoreGitPaths).ToNot(BeNil())
+				Expect(*updated.Spec.Model.IgnoreGitPaths).To(BeFalse())
+				Expect(updated.Spec.Model.IgnoreUnsignedFiles).ToNot(BeNil())
+				Expect(*updated.Spec.Model.IgnoreUnsignedFiles).To(BeTrue())
+				Expect(updated.Spec.Model.AllowSymlinks).ToNot(BeNil())
+				Expect(*updated.Spec.Model.AllowSymlinks).To(BeFalse())
+			})
 		})
 	})
 })
