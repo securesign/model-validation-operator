@@ -58,6 +58,11 @@ USER root
 
 # Generate and validate the Operator bundle
 RUN cat ./config/manifests/all.yaml | operator-sdk generate bundle ${BUNDLE_GEN_FLAGS} \
+    && CSV="bundle/manifests/model-validation-operator.clusterserviceversion.yaml" \
+    && sed -i 's/deploymentName: webhook/deploymentName: model-validation-controller-manager/' "${CSV}" \
+    && sed -i 's/deploymentName: model-validation-controller-manager/deploymentName: model-validation-controller-manager\
+      serviceName: model-validation-webhook\
+      containerPort: 9443/' "${CSV}" \
     && operator-sdk bundle validate ./bundle
 
 FROM scratch
