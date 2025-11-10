@@ -26,8 +26,6 @@ spec:
     value: Dockerfile.model-validation-bundle.rh
   - name: hermetic
     value: "true"
-  - name: prefetch-input
-    value: '{"type": "generic", "path": "."}'
   - name: build-source-image
     value: "true"
   - name: manager-pipelinerun-selector
