@@ -460,6 +460,8 @@ e2e-sign-test-model: e2e-generate-test-keys
 		-v $(PWD)/testdata/tensorflow_saved_model:/model \
 		-v $(PWD)/testdata/docker/test_private_key.priv:/test_private_key.priv \
 		--entrypoint "" \
+		--user "$(id -u)":"$(id -g)" \
+		-e HOME=/tmp \
 		$(MODEL_TRANSPARENCY_IMG) \
 		model_signing sign key /model \
 		--private_key /test_private_key.priv \
