@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 env:
-  MODEL_TRANSPARENCY_IMG: quay.io/securesign/model-transparency@sha256:a03de6850e5a9a948541761de13d903ffb35d78cad4433d1cf67fbdbfed41891
+  MODEL_TRANSPARENCY_IMG: quay.io/securesign/model-transparency@sha256:c9704230cc525fe00b16aced00d31dc56c6105c630849d0a72c558c0aa4c2c60
 
 permissions:
   contents: read
