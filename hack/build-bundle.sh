@@ -1,12 +1,11 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-KUSTOMIZATION_FILE="config/manager/kustomization.yaml"
 
 IMG_NAME="${IMG%@*}"
 IMG_DIGEST="${IMG#*@}"
 
-cat << EOF >> "${KUSTOMIZATION_FILE}"
+cat << EOF >> "config/overlays/${BUNDLE_OVERLAY}/kustomization.yaml"
 
 images:
 - digest: ${IMG_DIGEST}
@@ -15,7 +14,7 @@ images:
 EOF
 
 # Generate and validate the Operator bundle
-oc kustomize config/manifests | operator-sdk generate bundle ${BUNDLE_GEN_FLAGS}
+oc kustomize "config/overlays/${BUNDLE_OVERLAY}" | operator-sdk generate bundle ${BUNDLE_GEN_FLAGS}
 
 CSV="bundle/manifests/model-validation-operator.clusterserviceversion.yaml"
 
