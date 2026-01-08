@@ -29,6 +29,29 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// expectIgnorePathsWithValues is a helper function to verify --ignore-paths flag followed by expected paths
+func expectIgnorePathsWithValues(args []string, expectedPaths ...string) {
+	Expect(args).To(ContainElement("--ignore-paths"), "--ignore-paths flag should be present")
+
+	foundPaths := make(map[string]bool)
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--ignore-paths" {
+			i++
+			if i < len(args) {
+				foundPaths[args[i]] = true
+			}
+		}
+	}
+
+	Expect(foundPaths).To(HaveLen(len(expectedPaths)),
+		fmt.Sprintf("Expected %d paths but found %d", len(expectedPaths), len(foundPaths)))
+
+	for _, expectedPath := range expectedPaths {
+		Expect(foundPaths[expectedPath]).To(BeTrue(),
+			fmt.Sprintf("Expected path '%s' should follow --ignore-paths flag", expectedPath))
+	}
+}
+
 var _ = Describe("Pod webhook", func() {
 	Context("Pod webhook test", func() {
 		Name := "test"
@@ -221,6 +244,219 @@ var _ = Describe("Pod webhook", func() {
 
 			By("Cleanup trust config namespace")
 			_ = k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: trustConfigNamespace}})
+		})
+
+		It("Should apply model options from CRD", func() {
+			crdTestName := "crd-test"
+			crdTestNamespace := fmt.Sprintf("crd-ns-%d", time.Now().UnixNano())
+
+			By("Creating the Namespace for CRD test")
+			crdNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: crdTestNamespace,
+				},
+			}
+			err := k8sClient.Create(ctx, crdNs)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Create ModelValidation with ignore options in CRD")
+			ignoreGitPaths := true
+			ignoreUnsignedFiles := false
+			allowSymlinks := true
+			crdMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
+				Name:                crdTestName,
+				Namespace:           crdTestNamespace,
+				ConfigType:          "sigstore",
+				CertIdentity:        "crd@example.com",
+				CertOidcIssuer:      "https://accounts.google.com",
+				ModelPath:           "/path/to/crd/model.onnx",
+				SignaturePath:       "/path/to/crd/model.onnx.sig",
+				IgnorePaths:         []string{"/data/temp", "/data/.git"},
+				IgnoreGitPaths:      &ignoreGitPaths,
+				IgnoreUnsignedFiles: &ignoreUnsignedFiles,
+				AllowSymlinks:       &allowSymlinks,
+			})
+			err = k8sClient.Create(ctx, crdMv)
+			Expect(err).To(Not(HaveOccurred()))
+
+			statusTracker.AddModelValidation(ctx, crdMv)
+
+			By("create pod without annotations")
+			crdPod := testutil.CreateTestPod(testutil.TestPodOptions{
+				Name:      "crd-pod",
+				Namespace: crdTestNamespace,
+				Labels:    map[string]string{constants.ModelValidationLabel: crdTestName},
+			})
+			err = k8sClient.Create(ctx, crdPod)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Checking that validation sidecar was created with CRD options")
+			foundCrdPod := &corev1.Pod{}
+			Eventually(ctx, func(ctx context.Context) []corev1.Container {
+				_ = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "crd-pod",
+					Namespace: crdTestNamespace,
+				}, foundCrdPod)
+				return foundCrdPod.Spec.InitContainers
+			}, 5*time.Second).Should(HaveLen(1))
+
+			By("Verifying ignore options from CRD are present in arguments")
+			initContainer := foundCrdPod.Spec.InitContainers[0]
+			args := initContainer.Args
+
+			expectIgnorePathsWithValues(args, "/data/temp", "/data/.git")
+			Expect(args).To(ContainElement("--ignore-git-paths"))
+			Expect(args).To(ContainElement("--no-ignore_unsigned_files"))
+			Expect(args).To(ContainElement("--allow_symlinks"))
+
+			By("Cleanup CRD namespace")
+			_ = k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: crdTestNamespace}})
+		})
+
+		It("Should apply model options from pod annotations", func() {
+			annotationsTestName := "annotations-test"
+			annotationsTestNamespace := fmt.Sprintf("annotations-ns-%d", time.Now().UnixNano())
+
+			By("Creating the Namespace for annotations test")
+			annotationsNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: annotationsTestNamespace,
+				},
+			}
+			err := k8sClient.Create(ctx, annotationsNs)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Create ModelValidation without ignore options")
+			annotationsMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
+				Name:           annotationsTestName,
+				Namespace:      annotationsTestNamespace,
+				ConfigType:     "sigstore",
+				CertIdentity:   "annotations@example.com",
+				CertOidcIssuer: "https://accounts.google.com",
+				ModelPath:      "/path/to/annotations/model.onnx",
+				SignaturePath:  "/path/to/annotations/model.onnx.sig",
+			})
+			err = k8sClient.Create(ctx, annotationsMv)
+			Expect(err).To(Not(HaveOccurred()))
+
+			statusTracker.AddModelValidation(ctx, annotationsMv)
+
+			By("create pod with ignore annotations")
+			annotationsPod := testutil.CreateTestPod(testutil.TestPodOptions{
+				Name:      "annotations-pod",
+				Namespace: annotationsTestNamespace,
+				Labels:    map[string]string{constants.ModelValidationLabel: annotationsTestName},
+				Annotations: map[string]string{
+					constants.IgnorePathsAnnotationKey:         "/tmp,/cache",
+					constants.IgnoreGitPathsAnnotationKey:      "true",
+					constants.IgnoreUnsignedFilesAnnotationKey: "false",
+					constants.AllowSymlinksAnnotationKey:       "true",
+				},
+			})
+			err = k8sClient.Create(ctx, annotationsPod)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Checking that validation sidecar was created with annotation options")
+			foundAnnotationsPod := &corev1.Pod{}
+			Eventually(ctx, func(ctx context.Context) []corev1.Container {
+				_ = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "annotations-pod",
+					Namespace: annotationsTestNamespace,
+				}, foundAnnotationsPod)
+				return foundAnnotationsPod.Spec.InitContainers
+			}, 5*time.Second).Should(HaveLen(1))
+
+			By("Verifying ignore options arguments are present")
+			initContainer := foundAnnotationsPod.Spec.InitContainers[0]
+			args := initContainer.Args
+
+			expectIgnorePathsWithValues(args, "/tmp", "/cache")
+			Expect(args).To(ContainElement("--ignore-git-paths"))
+			Expect(args).To(ContainElement("--no-ignore_unsigned_files"))
+			Expect(args).To(ContainElement("--allow_symlinks"))
+
+			By("Cleanup annotations namespace")
+			_ = k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: annotationsTestNamespace}})
+		})
+
+		It("Should override CRD model options with pod annotations", func() {
+			overrideTestName := "override-test"
+			overrideTestNamespace := fmt.Sprintf("override-ns-%d", time.Now().UnixNano())
+
+			By("Creating the Namespace for override test")
+			overrideNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: overrideTestNamespace,
+				},
+			}
+			err := k8sClient.Create(ctx, overrideNs)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Create ModelValidation with ignore options in CRD")
+			ignoreGitPathsCrd := false
+			ignoreUnsignedFilesCrd := true
+			allowSymlinksCrd := false
+			overrideMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
+				Name:                overrideTestName,
+				Namespace:           overrideTestNamespace,
+				ConfigType:          "sigstore",
+				CertIdentity:        "override@example.com",
+				CertOidcIssuer:      "https://accounts.google.com",
+				ModelPath:           "/path/to/override/model.onnx",
+				SignaturePath:       "/path/to/override/model.onnx.sig",
+				IgnorePaths:         []string{"/crd/path1", "/crd/path2"},
+				IgnoreGitPaths:      &ignoreGitPathsCrd,
+				IgnoreUnsignedFiles: &ignoreUnsignedFilesCrd,
+				AllowSymlinks:       &allowSymlinksCrd,
+			})
+			err = k8sClient.Create(ctx, overrideMv)
+			Expect(err).To(Not(HaveOccurred()))
+
+			statusTracker.AddModelValidation(ctx, overrideMv)
+
+			By("create pod with annotations that override CRD values")
+			overridePod := testutil.CreateTestPod(testutil.TestPodOptions{
+				Name:      "override-pod",
+				Namespace: overrideTestNamespace,
+				Labels:    map[string]string{constants.ModelValidationLabel: overrideTestName},
+				Annotations: map[string]string{
+					constants.IgnorePathsAnnotationKey:         "/annotation/path1,/annotation/path2",
+					constants.IgnoreGitPathsAnnotationKey:      "true",  // opposite of CRD
+					constants.IgnoreUnsignedFilesAnnotationKey: "false", // opposite of CRD
+					constants.AllowSymlinksAnnotationKey:       "true",  // opposite of CRD
+				},
+			})
+			err = k8sClient.Create(ctx, overridePod)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Checking that validation sidecar was created with annotation options")
+			foundOverridePod := &corev1.Pod{}
+			Eventually(ctx, func(ctx context.Context) []corev1.Container {
+				_ = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "override-pod",
+					Namespace: overrideTestNamespace,
+				}, foundOverridePod)
+				return foundOverridePod.Spec.InitContainers
+			}, 5*time.Second).Should(HaveLen(1))
+
+			By("Verifying annotation values override CRD values")
+			initContainer := foundOverridePod.Spec.InitContainers[0]
+			args := initContainer.Args
+
+			expectIgnorePathsWithValues(args, "/annotation/path1", "/annotation/path2")
+			Expect(args).ToNot(ContainElement("/crd/path1"))
+			Expect(args).ToNot(ContainElement("/crd/path2"))
+
+			Expect(args).To(ContainElement("--ignore-git-paths"))
+			Expect(args).ToNot(ContainElement("--no-ignore-git-paths"))
+
+			Expect(args).To(ContainElement("--no-ignore_unsigned_files"))
+			Expect(args).ToNot(ContainElement("--ignore_unsigned_files"))
+
+			Expect(args).To(ContainElement("--allow_symlinks"))
+
+			By("Cleanup override namespace")
+			_ = k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: overrideTestNamespace}})
 		})
 	})
 })
