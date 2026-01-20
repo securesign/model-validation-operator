@@ -29,9 +29,6 @@ spec:
     - jsonPath: .status.orphanedPodCount
       name: Orphaned Pods
       type: integer
-    - jsonPath: .metadata.creationTimestamp
-      name: Age
-      type: date
     - jsonPath: .spec.model.path
       name: Model Path
       type: string
