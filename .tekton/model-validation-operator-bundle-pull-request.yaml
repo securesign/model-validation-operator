@@ -38,7 +38,7 @@ spec:
   - name: build-source-image
     value: "true"
   - name: manager-pipelinerun-selector
-    value: "appstudio.openshift.io/application=model-validation-operator,appstudio.openshift.io/component=model-validation-operator-tech-preview,pipelinesascode.tekton.dev/sha={{revision}},pipelinesascode.tekton.dev/event-type in (pull_request,retest-all-comment)"
+    value: "appstudio.openshift.io/application=model-validation-operator-tech-preview,appstudio.openshift.io/component=model-validation-operator-tech-preview,pipelinesascode.tekton.dev/sha={{revision}},pipelinesascode.tekton.dev/event-type in (pull_request,retest-all-comment)"
   - name: manager-registry-url
     value: registry.redhat.io/rhtas/model-validation-rhel9-operator
   pipelineRef:
