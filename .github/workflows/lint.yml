@@ -2,9 +2,9 @@ name: Linter
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "tech-preview" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "tech-preview ]
 
 permissions:
   contents: read
