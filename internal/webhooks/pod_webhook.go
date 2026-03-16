@@ -25,6 +25,7 @@ import (
 
 	"github.com/sigstore/model-validation-operator/internal/constants"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -33,6 +34,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/sigstore/model-validation-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 )
 
 // NewPodInterceptor creates a new pod mutating webhook to be registered
@@ -121,20 +124,99 @@ func (p *podInterceptor) Handle(ctx context.Context, req admission.Request) admi
 	for _, c := range pod.Spec.Containers {
 		vm = append(vm, c.VolumeMounts...)
 	}
-	pp.Spec.InitContainers = append(pp.Spec.InitContainers, corev1.Container{
-		Name:            constants.ModelValidationInitContainerName,
-		ImagePullPolicy: corev1.PullAlways,
-		Image:           constants.ModelTransparencyCliImage,
-		Command:         []string{"model_signing"},
-		Args:            args,
-		VolumeMounts:    vm,
-	})
+
+	container := buildValidationContainer(mv, args, vm, pp)
+	pp.Spec.InitContainers = append(pp.Spec.InitContainers, container)
+
 	marshaledPod, err := json.Marshal(pp)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
+}
+
+// buildValidationContainer constructs the validation container with appropriate configuration
+// for either one-shot or continuous validation based on ModelValidation spec
+func buildValidationContainer(
+	mv *v1alpha1.ModelValidation, args []string, vm []corev1.VolumeMount, pp *corev1.Pod,
+) corev1.Container {
+	// Determine image pull policy
+	imagePullPolicy := corev1.PullAlways
+	if mv.Spec.ImagePullPolicy != "" {
+		imagePullPolicy = mv.Spec.ImagePullPolicy
+	}
+
+	container := corev1.Container{
+		Name:            constants.ModelValidationInitContainerName,
+		Image:           constants.ModelValidationAgentImage,
+		ImagePullPolicy: imagePullPolicy,
+		Command:         []string{"/usr/local/bin/validation-agent"},
+		Args:            args,
+		VolumeMounts:    vm,
+	}
+
+	// Add continuous validation configuration if enabled
+	if mv.Spec.ContinuousValidation != nil && mv.Spec.ContinuousValidation.Enabled {
+		interval := "5m"
+		if mv.Spec.ContinuousValidation.Interval != "" {
+			interval = mv.Spec.ContinuousValidation.Interval
+		}
+
+		// Make it a native sidecar with restartPolicy: Always
+		container.RestartPolicy = ptr.To(corev1.ContainerRestartPolicyAlways)
+
+		// Prepend interval flag to args
+		container.Args = append([]string{"--interval=" + interval}, args...)
+
+		// Add readiness probe (ready after first successful validation)
+		container.ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ready",
+					Port: intstr.FromInt(8080),
+				},
+			},
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       10,
+		}
+
+		// Add liveness probe (healthy while process is running)
+		container.LivenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/healthz",
+					Port: intstr.FromInt(8080),
+				},
+			},
+			InitialDelaySeconds: 10,
+			PeriodSeconds:       30,
+		}
+
+		// Add annotation to track continuous validation (for informational/tracking purposes)
+		if pp.Annotations == nil {
+			pp.Annotations = make(map[string]string)
+		}
+		pp.Annotations[constants.ContinuousValidationAnnotationKey] = "true"
+	}
+
+	// Apply resource requirements (for both one-shot and continuous modes)
+	if mv.Spec.Resources != nil {
+		container.Resources = *mv.Spec.Resources
+	} else {
+		container.Resources = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		}
+	}
+
+	return container
 }
 
 func validationConfigToArgs(logger logr.Logger, cfg v1alpha1.ValidationConfig, model v1alpha1.Model) []string {

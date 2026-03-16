@@ -34,6 +34,13 @@ IMAGE_TAG_BASE ?= ghcr.io/sigstore/model-validation-operator
 # IMG defines the image:tag used for the operator.
 IMG ?= $(IMAGE_TAG_BASE):v$(VERSION)
 
+# AGENT_IMG defines the image:tag used for the validation agent.
+# This is injected into the operator binary via ldflags at build time.
+AGENT_IMG ?= ghcr.io/sigstore/model-validation-agent:v0.1.0
+
+# LDFLAGS to inject the agent image into the operator binary
+LDFLAGS := -X github.com/sigstore/model-validation-operator/internal/constants.ModelValidationAgentImage=$(AGENT_IMG)
+
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
@@ -140,12 +147,19 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+build: manifests generate fmt vet build-operator build-agent ## Build manager and agent binaries.
+
+.PHONY: build-operator
+build-operator: ## Build manager binary.
+	go build -ldflags="$(LDFLAGS)" -o bin/manager cmd/main.go
+
+.PHONY: build-agent
+build-agent: ## Build validation-agent binary.
+	go build -o bin/validation-agent cmd/validation-agent/main.go
 
 .PHONY: run
 run: manifests generate fmt vet generate-local-certs ## Run a controller from your host.
-	go run ./cmd/main.go
+	go run -ldflags="$(LDFLAGS)" ./cmd/main.go
 
 .PHONY: generate-certs
 generate-certs: ## Generate TLS certificates to specified directory (use CERT_DIR=path)
@@ -181,7 +195,7 @@ generate-local-certs: ## Generate TLS certificates for local development
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} -f ${CONTAINER_FILE} .
+	$(CONTAINER_TOOL) build -t ${IMG} --build-arg AGENT_IMG=${AGENT_IMG} -f ${CONTAINER_FILE} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
@@ -200,9 +214,27 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' ${CONTAINER_FILE} > ${CONTAINER_FILE}.cross
 	- $(CONTAINER_TOOL) buildx create --name model-validation-operator-builder
 	$(CONTAINER_TOOL) buildx use model-validation-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f ${CONTAINER_FILE}.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --build-arg AGENT_IMG=${AGENT_IMG} --tag ${IMG} -f ${CONTAINER_FILE}.cross .
 	- $(CONTAINER_TOOL) buildx rm model-validation-operator-builder
 	rm ${CONTAINER_FILE}.cross
+
+.PHONY: docker-build-agent
+docker-build-agent: test ## Build docker image with the validation agent.
+	$(CONTAINER_TOOL) build -t ${AGENT_IMG} -f Dockerfile.agent .
+
+.PHONY: docker-push-agent
+docker-push-agent: ## Push docker image with the validation agent.
+	$(CONTAINER_TOOL) push ${AGENT_IMG}
+
+.PHONY: docker-buildx-agent
+docker-buildx-agent: ## Build and push docker image for the agent for cross-platform support
+	# copy existing Dockerfile.agent and insert --platform=${BUILDPLATFORM} into Dockerfile.agent.cross
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.agent > Dockerfile.agent.cross
+	- $(CONTAINER_TOOL) buildx create --name model-validation-agent-builder
+	$(CONTAINER_TOOL) buildx use model-validation-agent-builder
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${AGENT_IMG} -f Dockerfile.agent.cross .
+	- $(CONTAINER_TOOL) buildx rm model-validation-agent-builder
+	rm Dockerfile.agent.cross
 
 .PHONY: build-installer
 build-installer: manifests ## Generate a consolidated YAML with CRDs and deployment.
@@ -254,7 +286,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.18.0
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.3.0
+GOLANGCI_LINT_VERSION ?= v2.4.0
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -459,11 +491,9 @@ e2e-sign-test-model: e2e-generate-test-keys
 	$(CONTAINER_TOOL) run --rm \
 		-v $(PWD)/testdata/tensorflow_saved_model:/model \
 		-v $(PWD)/testdata/docker/test_private_key.priv:/test_private_key.priv \
-		--entrypoint "" \
-		--user "$(id -u)":"$(id -g)" \
-		-e HOME=/tmp \
-		$(MODEL_TRANSPARENCY_IMG) \
-		model_signing sign key /model \
+		--entrypoint="" \
+		ghcr.io/sigstore/model-transparency-cli:v1.0.1 \
+		/usr/local/bin/model_signing sign key /model \
 		--private_key /test_private_key.priv \
 		--signature /model/model.sig
 
@@ -490,14 +520,22 @@ e2e-uninstall-certmanager: ## Uninstall cert-manager
 
 .PHONY: e2e-build-image
 e2e-build-image:
-	$(CONTAINER_TOOL) build -t $(IMG) -f $(CONTAINER_FILE) .
+	$(CONTAINER_TOOL) build -t $(IMG) --build-arg AGENT_IMG=${AGENT_IMG} -f $(CONTAINER_FILE) .
+
+.PHONY: e2e-build-agent-image
+e2e-build-agent-image:
+	$(CONTAINER_TOOL) build -t $(AGENT_IMG) -f Dockerfile.agent .
 
 .PHONY: e2e-load-images
-e2e-load-images: e2e-build-image e2e-build-test-model
+e2e-load-images: e2e-build-image e2e-build-agent-image e2e-build-test-model
 	@echo "Pulling model-transparency-cli image..."
 	$(CONTAINER_TOOL) pull $(MODEL_TRANSPARENCY_IMG)
 	@echo "Loading manager image into Kind cluster..."
 	$(KIND) load docker-image -n $(KIND_CLUSTER) $(IMG)
+	@echo "Loading agent image into Kind cluster..."
+	$(KIND) load docker-image -n $(KIND_CLUSTER) $(AGENT_IMG)
+	@echo "Loading model-transparency-cli image into Kind cluster..."
+	$(KIND) load docker-image -n $(KIND_CLUSTER) $(MODEL_TRANSPARENCY_IMG)
 	@echo "Loading test model image into Kind cluster..."
 	$(KIND) load docker-image -n $(KIND_CLUSTER) $(E2E_TEST_MODEL)
 

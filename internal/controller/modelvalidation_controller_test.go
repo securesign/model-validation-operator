@@ -45,7 +45,7 @@ var _ = Describe("ModelValidationReconciler", func() {
 
 			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Requeue).To(BeFalse())
+			Expect(result.RequeueAfter).To(BeZero())
 
 			addCalls := mockTracker.GetAddModelValidationCalls()
 			Expect(addCalls).To(HaveLen(1))
@@ -56,7 +56,7 @@ var _ = Describe("ModelValidationReconciler", func() {
 			// Controller is not idempotent - it calls tracker each time
 			result, err = reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Requeue).To(BeFalse())
+			Expect(result.RequeueAfter).To(BeZero())
 
 			addCalls = mockTracker.GetAddModelValidationCalls()
 			Expect(addCalls).To(HaveLen(2))
@@ -87,7 +87,7 @@ var _ = Describe("ModelValidationReconciler", func() {
 
 			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Requeue).To(BeFalse())
+			Expect(result.RequeueAfter).To(BeZero())
 
 			removeCalls := mockTracker.GetRemoveModelValidationCalls()
 			Expect(removeCalls).To(HaveLen(1))
@@ -110,7 +110,7 @@ var _ = Describe("ModelValidationReconciler", func() {
 
 			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Requeue).To(BeFalse())
+			Expect(result.RequeueAfter).To(BeZero())
 
 			removeCalls := mockTracker.GetRemoveModelValidationCalls()
 			Expect(removeCalls).To(HaveLen(1))
