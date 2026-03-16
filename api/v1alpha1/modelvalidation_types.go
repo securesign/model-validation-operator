@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -114,6 +115,27 @@ type ValidationConfig struct {
 	ClientTrustConfig *ClientTrustConfig `json:"clientTrustConfig,omitempty"`
 }
 
+// ContinuousValidation defines the configuration for continuous model validation.
+// When enabled, the validation container runs as a native sidecar with restartPolicy: Always,
+// allowing periodic re-validation of the model.
+// Note: Native sidecar support requires Kubernetes 1.28+ with the feature explicitly enabled,
+// or Kubernetes 1.29+ where it is enabled by default.
+type ContinuousValidation struct {
+	// Enabled controls whether continuous validation is active.
+	// When true, the validation container runs as a native sidecar with restartPolicy: Always.
+	// When false (default), the validation container runs as a standard init container.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled"`
+
+	// Interval defines how often to re-validate the model (e.g., "5m", "1h").
+	// Only used when Enabled is true.
+	// Minimum interval is 1m to prevent excessive CPU usage.
+	// +kubebuilder:default="5m"
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(m|h))+$`
+	// +kubebuilder:validation:XValidation:rule="self == '' || duration(self) >= duration('1m')", message="interval must be at least 1m"
+	Interval string `json:"interval,omitempty"`
+}
+
 // ModelValidationSpec defines the desired state of ModelValidation
 type ModelValidationSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -124,6 +146,33 @@ type ModelValidationSpec struct {
 	// Configuration for validation methods.
 	// Exactly one validation method must be specified.
 	Config ValidationConfig `json:"config"`
+
+	// ImagePullPolicy specifies the pull policy for the validation container image.
+	// Defaults to Always if not specified.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=Always
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// ContinuousValidation enables periodic re-validation of the model.
+	// When enabled, the init container becomes a native sidecar.
+	// Requires Kubernetes 1.28+ with SidecarContainers feature gate enabled, or 1.29+ (enabled by default).
+	// +kubebuilder:validation:Optional
+	ContinuousValidation *ContinuousValidation `json:"continuousValidation,omitempty"`
+
+	// Resources specifies the compute resource requirements for the validation container.
+	// If not specified, defaults are applied: CPU requests=100m/limits=1, Memory requests=128Mi/limits=512Mi.
+	// +kubebuilder:validation:Optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// PodTrackingInfo contains information about a tracked pod
+type PodTrackingInfo struct {
+	// Name is the name of the pod
+	Name string `json:"name"`
+	// UID is the unique identifier of the pod
+	UID string `json:"uid"`
+	// InjectedAt is when the pod was injected
+	InjectedAt metav1.Time `json:"injectedAt"`
 }
 
 // PodTrackingInfo contains information about a tracked pod
@@ -173,7 +222,6 @@ type ModelValidationStatus struct {
 // +kubebuilder:printcolumn:name="Injected Pods",type=integer,JSONPath=`.status.injectedPodCount`
 // +kubebuilder:printcolumn:name="Uninjected Pods",type=integer,JSONPath=`.status.uninjectedPodCount`
 // +kubebuilder:printcolumn:name="Orphaned Pods",type=integer,JSONPath=`.status.orphanedPodCount`
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Model Path",type="string",JSONPath=".spec.model.path"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type ModelValidation struct {
@@ -207,7 +255,46 @@ func (mv *ModelValidation) GetAuthMethod() string {
 
 // GetConfigHash returns a hash of the validation configuration for drift detection
 func (mv *ModelValidation) GetConfigHash() string {
-	return mv.Spec.Config.GetConfigHash()
+	hasher := sha256.New()
+
+	// Include validation config
+	hasher.Write([]byte(mv.Spec.Config.GetConfigHash()))
+
+	// Include image pull policy
+	hasher.Write([]byte(mv.Spec.ImagePullPolicy))
+
+	// Include continuous validation settings
+	if mv.Spec.ContinuousValidation != nil {
+		if mv.Spec.ContinuousValidation.Enabled {
+			hasher.Write([]byte("continuous-enabled"))
+			hasher.Write([]byte(mv.Spec.ContinuousValidation.Interval))
+		} else {
+			hasher.Write([]byte("continuous-disabled"))
+		}
+	}
+
+	// Include resource requirements
+	if mv.Spec.Resources != nil {
+		hasher.Write([]byte("resources"))
+		if mv.Spec.Resources.Requests != nil {
+			if q, ok := mv.Spec.Resources.Requests[corev1.ResourceCPU]; ok {
+				hasher.Write([]byte("req-cpu:" + q.String()))
+			}
+			if q, ok := mv.Spec.Resources.Requests[corev1.ResourceMemory]; ok {
+				hasher.Write([]byte("req-mem:" + q.String()))
+			}
+		}
+		if mv.Spec.Resources.Limits != nil {
+			if q, ok := mv.Spec.Resources.Limits[corev1.ResourceCPU]; ok {
+				hasher.Write([]byte("lim-cpu:" + q.String()))
+			}
+			if q, ok := mv.Spec.Resources.Limits[corev1.ResourceMemory]; ok {
+				hasher.Write([]byte("lim-mem:" + q.String()))
+			}
+		}
+	}
+
+	return fmt.Sprintf("%x", hasher.Sum(nil))[:16]
 }
 
 // GetConfigHash returns a hash of the validation configuration for drift detection

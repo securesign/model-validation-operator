@@ -79,6 +79,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var disableWebhook bool
 	var tlsOpts []func(*tls.Config)
 
 	// Status tracker configuration
@@ -105,11 +106,13 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	utils.StringFlagOrEnv(&constants.ModelTransparencyCliImage,
-		"model-transparency-cli-image",
-		"MODEL_TRANSPARENCY_CLI_IMAGE",
-		constants.ModelTransparencyCliImage,
-		"Model transparency CLI image to be used.")
+	flag.BoolVar(&disableWebhook, "disable-webhook", false,
+		"Disable the webhook server for development environments without certificates.")
+	utils.StringFlagOrEnv(&constants.ModelValidationAgentImage,
+		"validation-agent-image",
+		"VALIDATION_AGENT_IMAGE",
+		constants.ModelValidationAgentImage,
+		"Validation agent image to be used.")
 
 	// Status tracker configuration flags
 	flag.DurationVar(&debounceDuration, "debounce-duration", defaultDebounceDuration,
@@ -150,31 +153,36 @@ func main() {
 	// Create watchers for metrics and webhooks certificates
 	var metricsCertWatcher, webhookCertWatcher *certwatcher.CertWatcher
 
-	// Initial webhook TLS options
-	webhookTLSOpts := tlsOpts
+	var webhookServer webhook.Server
+	if !disableWebhook {
+		// Initial webhook TLS options
+		webhookTLSOpts := tlsOpts
 
-	if len(webhookCertPath) > 0 {
-		setupLog.Info("Initializing webhook certificate watcher using provided certificates",
-			"webhook-cert-path", webhookCertPath, "webhook-cert-name", webhookCertName, "webhook-cert-key", webhookCertKey)
+		if len(webhookCertPath) > 0 {
+			setupLog.Info("Initializing webhook certificate watcher using provided certificates",
+				"webhook-cert-path", webhookCertPath, "webhook-cert-name", webhookCertName, "webhook-cert-key", webhookCertKey)
 
-		var err error
-		webhookCertWatcher, err = certwatcher.New(
-			filepath.Join(webhookCertPath, webhookCertName),
-			filepath.Join(webhookCertPath, webhookCertKey),
-		)
-		if err != nil {
-			setupLog.Error(err, "Failed to initialize webhook certificate watcher")
-			os.Exit(1)
+			var err error
+			webhookCertWatcher, err = certwatcher.New(
+				filepath.Join(webhookCertPath, webhookCertName),
+				filepath.Join(webhookCertPath, webhookCertKey),
+			)
+			if err != nil {
+				setupLog.Error(err, "Failed to initialize webhook certificate watcher")
+				os.Exit(1)
+			}
+
+			webhookTLSOpts = append(webhookTLSOpts, func(config *tls.Config) {
+				config.GetCertificate = webhookCertWatcher.GetCertificate
+			})
 		}
 
-		webhookTLSOpts = append(webhookTLSOpts, func(config *tls.Config) {
-			config.GetCertificate = webhookCertWatcher.GetCertificate
+		webhookServer = webhook.NewServer(webhook.Options{
+			TLSOpts: webhookTLSOpts,
 		})
+	} else {
+		setupLog.Info("Webhooks are disabled")
 	}
-
-	webhookServer := webhook.NewServer(webhook.Options{
-		TLSOpts: webhookTLSOpts,
-	})
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
@@ -212,7 +220,7 @@ func main() {
 			filepath.Join(metricsCertPath, metricsCertKey),
 		)
 		if err != nil {
-			setupLog.Error(err, "to initialize metrics certificate watcher", "error", err)
+			setupLog.Error(err, "Failed to initialize metrics certificate watcher")
 			os.Exit(1)
 		}
 
@@ -272,12 +280,43 @@ func main() {
 		os.Exit(1)
 	}
 
-	decoder := admission.NewDecoder(mgr.GetScheme())
+	if !disableWebhook {
+		decoder := admission.NewDecoder(mgr.GetScheme())
+		interceptor := webhooks.NewPodInterceptor(mgr.GetClient(), decoder)
+		mgr.GetWebhookServer().Register("/mutate-v1-pod", &admission.Webhook{
+			Handler: interceptor,
+		})
+	}
 
-	interceptor := webhooks.NewPodInterceptor(mgr.GetClient(), decoder)
-	mgr.GetWebhookServer().Register("/mutate-v1-pod", &admission.Webhook{
-		Handler: interceptor,
+	statusTracker := tracker.NewStatusTracker(mgr.GetClient(), tracker.StatusTrackerConfig{
+		DebounceDuration:    debounceDuration,
+		RetryBaseDelay:      retryBaseDelay,
+		RetryMaxDelay:       retryMaxDelay,
+		RateLimitQPS:        rateLimitQPS,
+		RateLimitBurst:      rateLimitBurst,
+		StatusUpdateTimeout: statusUpdateTimeout,
 	})
+	defer statusTracker.Stop()
+
+	podReconciler := &controller.PodReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Tracker: statusTracker,
+	}
+	if err := podReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create pod controller")
+		os.Exit(1)
+	}
+
+	mvReconciler := &controller.ModelValidationReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Tracker: statusTracker,
+	}
+	if err := mvReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create ModelValidation controller")
+		os.Exit(1)
+	}
 
 	statusTracker := tracker.NewStatusTracker(mgr.GetClient(), tracker.StatusTrackerConfig{
 		DebounceDuration:    debounceDuration,

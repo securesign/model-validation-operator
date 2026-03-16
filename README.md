@@ -6,12 +6,13 @@ This project is a proof of concept based on the [sigstore/model-transperency-cli
 
 - Model Validation: Ensures AI models are validated before they are used by workloads.
 - Webhook Integration: A webhook automatically injects an initcontainer into pods to perform the validation step.
-- Custom Resource: Configurable `ModelValidation` custom resource to specify how models should be validated. 
+- Custom Resource: Configurable `ModelValidation` custom resource to specify how models should be validated.
     - Supports methods like [Sigstore](https://www.sigstore.dev/), pki or public key validation.
+- Continuous Validation: Optional periodic re-validation of models using Kubernetes native sidecars (requires Kubernetes 1.28+).
 
 ### Prerequisites
 
-- Kubernetes 1.29+ or OpenShift 4.16+
+- Kubernetes 1.29+ or OpenShift 4.16+ (Kubernetes 1.28+ for continuous validation)
 - Proper configuration for model validation (e.g., Sigstore, public keys)
 - A signed model (e.g. check the `testdata` or `examples` folder)
 
@@ -21,8 +22,15 @@ The operator can be installed via [kustomize](https://kustomize.io/) using diffe
 
 #### Production Deployment
 For production environments with cert-manager integration:
+
+**Prerequisites:** Install [cert-manager](https://cert-manager.io/) first:
 ```bash
-kubectl apply -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/config/overlays/production
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+```
+
+Then deploy the operator:
+```bash
+kubectl apply -k https://github.com/sigstore/model-validation-operator/config/overlays/production
 # or local
 kubectl apply -k config/overlays/production
 ```
@@ -30,7 +38,7 @@ kubectl apply -k config/overlays/production
 #### Testing Deployment
 For testing environments with manual certificate management:
 ```bash
-kubectl apply -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/config/overlays/testing
+kubectl apply -k https://github.com/sigstore/model-validation-operator/config/overlays/testing
 # or local
 kubectl apply -k config/overlays/testing
 ```
@@ -38,7 +46,7 @@ kubectl apply -k config/overlays/testing
 #### Development Deployment
 For development environments, deploying the operator without the webhook integration:
 ```bash
-kubectl apply -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/config/overlays/development
+kubectl apply -k https://github.com/sigstore/model-validation-operator/config/overlays/development
 # or local
 kubectl apply -k config/overlays/development
 ```
@@ -46,7 +54,7 @@ kubectl apply -k config/overlays/development
 #### OLM Deployment
 For OpenShift/OLM environments:
 ```bash
-kubectl apply -k https://raw.githubusercontent.com/sigstore/model-validation-operator/main/config/overlays/olm
+kubectl apply -k https://github.com/sigstore/model-validation-operator/config/overlays/olm
 # or local
 kubectl apply -k config/overlays/olm
 ```
@@ -157,9 +165,54 @@ spec:
       claimName: models
 ```
 
+### Continuous Model Validation
+
+The operator supports continuous validation, which periodically re-validates models after the initial validation. This feature uses Kubernetes 1.28+ native sidecars with `restartPolicy: Always`.
+
+#### How It Works
+
+When continuous validation is enabled:
+1. The validation container runs as a native sidecar (not just an init container)
+2. After the initial validation succeeds, the container becomes ready
+3. The validation repeats at the specified interval
+4. On validation failure, the error is logged but the container continues running
+5. The readiness probe reflects the validation state
+
+#### Configuration
+
+Add the `continuousValidation` field to your ModelValidation CR:
+
+```yaml
+apiVersion: ml.sigstore.dev/v1alpha1
+kind: ModelValidation
+metadata:
+  name: demo-continuous
+spec:
+  config:
+    sigstoreConfig:
+      certificateIdentity: "user@example.com"
+      certificateOidcIssuer: "https://token.actions.githubusercontent.com"
+  model:
+    path: /data/tensorflow_saved_model
+    signaturePath: /data/tensorflow_saved_model/model.sig
+  continuousValidation:
+    enabled: true
+    interval: "10m"  # Supports s, m, h units (e.g., "30s", "5m", "1h")
+```
+
+#### Requirements
+
+- Kubernetes 1.28 or later (for native sidecar support with `restartPolicy: Always`)
+- The validation container will consume resources continuously (CPU/memory)
+- Consider longer intervals (e.g., 10m, 1h) for production workloads
+
 ### Examples
 
 The example folder contains example files for testing the operator.
+
+#### Example Continuous Validation
+
+See `examples/continuous-validation.yaml` for a complete example.
 
 #### Prerequisites for Examples
 
@@ -240,3 +293,60 @@ In case the workload is modified, is not executed:
 ERROR:__main__:verification failed: the manifests do not match
 ```
 
+#### Ignore Options
+
+The `model` section of the ModelValidation CR supports additional options to control which files are included during verification:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ignorePaths` | `[]string` | List of file paths to exclude from verification |
+| `ignoreGitPaths` | `bool` | When `true`, excludes git-related files (e.g., `.git/`, `.gitignore`) |
+| `ignoreUnsignedFiles` | `bool` | When `true`, unsigned files will not cause verification to fail |
+| `allowSymlinks` | `bool` | When `true`, symbolic links will be followed and their targets verified |
+
+Example with ignore options:
+```yaml
+apiVersion: ml.sigstore.dev/v1alpha1
+kind: ModelValidation
+metadata:
+  name: demo
+spec:
+  config:
+    sigstoreConfig:
+      certificateIdentity: "https://github.com/sigstore/model-validation-operator/.github/workflows/sign-model.yaml@refs/tags/v0.0.2"
+      certificateOidcIssuer: "https://token.actions.githubusercontent.com"
+  model:
+    path: /data/tensorflow_saved_model
+    signaturePath: /data/tensorflow_saved_model/model.sig
+    ignorePaths:
+      - /data/tensorflow_saved_model/cache
+      - /data/tensorflow_saved_model/tmp
+    ignoreGitPaths: true
+    allowSymlinks: true
+```
+
+#### Pod Annotations
+
+Ignore options can also be specified or overridden on individual pods using annotations. Pod annotations take precedence over the ModelValidation CR settings.
+
+| Annotation | Value | Description |
+|------------|-------|-------------|
+| `validation.ml.sigstore.dev/ignore-paths` | Comma-separated paths | Paths to exclude from verification |
+| `validation.ml.sigstore.dev/ignore-git-paths` | `"true"` or `"false"` | Exclude git-related files |
+| `validation.ml.sigstore.dev/ignore-unsigned-files` | `"true"` or `"false"` | Allow unsigned files |
+| `validation.ml.sigstore.dev/allow-symlinks` | `"true"` or `"false"` | Follow symbolic links |
+
+Example pod with annotation overrides:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: whatever-workload
+  labels:
+    validation.ml.sigstore.dev/ml: "demo"
+  annotations:
+    validation.ml.sigstore.dev/ignore-paths: "/data/tensorflow_saved_model/logs,/data/tensorflow_saved_model/tmp"
+    validation.ml.sigstore.dev/ignore-git-paths: "true"
+spec:
+  # ... rest of pod spec
+```
