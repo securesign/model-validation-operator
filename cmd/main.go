@@ -318,36 +318,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	statusTracker := tracker.NewStatusTracker(mgr.GetClient(), tracker.StatusTrackerConfig{
-		DebounceDuration:    debounceDuration,
-		RetryBaseDelay:      retryBaseDelay,
-		RetryMaxDelay:       retryMaxDelay,
-		RateLimitQPS:        rateLimitQPS,
-		RateLimitBurst:      rateLimitBurst,
-		StatusUpdateTimeout: statusUpdateTimeout,
-	})
-	defer statusTracker.Stop()
-
-	podReconciler := &controller.PodReconciler{
-		Client:  mgr.GetClient(),
-		Scheme:  mgr.GetScheme(),
-		Tracker: statusTracker,
-	}
-	if err := podReconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create pod controller")
-		os.Exit(1)
-	}
-
-	mvReconciler := &controller.ModelValidationReconciler{
-		Client:  mgr.GetClient(),
-		Scheme:  mgr.GetScheme(),
-		Tracker: statusTracker,
-	}
-	if err := mvReconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create ModelValidation controller")
-		os.Exit(1)
-	}
-
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
