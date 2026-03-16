@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive,staticcheck
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -358,7 +359,7 @@ func CreateServiceAccountToken(serviceAccountName, namespace string) (string, er
 
 // ExtractMetricValue extracts a specific metric value from Prometheus output
 func ExtractMetricValue(metricsOutput, metricName string, labels map[string]string) int {
-	parser := expfmt.TextParser{}
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	metricFamilies, err := parser.TextToMetricFamilies(strings.NewReader(metricsOutput))
 	if err != nil {
 		return 0

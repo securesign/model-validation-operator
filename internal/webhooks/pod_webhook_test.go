@@ -25,6 +25,7 @@ import (
 	"github.com/sigstore/model-validation-operator/internal/constants"
 	"github.com/sigstore/model-validation-operator/internal/testutil"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -132,7 +133,7 @@ var _ = Describe("Pod webhook", func() {
 				WithTransform(func(containers []corev1.Container) int { return len(containers) }, Equal(1)),
 				WithTransform(
 					func(containers []corev1.Container) string { return containers[0].Image },
-					Equal(constants.ModelTransparencyCliImage)),
+					Equal(constants.ModelValidationAgentImage)),
 			))
 
 			By("Checking that finalizer was added")
@@ -199,8 +200,6 @@ var _ = Describe("Pod webhook", func() {
 				ConfigType:      "sigstore",
 				CertIdentity:    "trust@example.com",
 				CertOidcIssuer:  "https://accounts.google.com",
-				ModelPath:       "/path/to/trust/model.onnx",
-				SignaturePath:   "/path/to/trust/model.onnx.sig",
 				TrustConfigPath: "/path/to/trust-config.json",
 			})
 			err = k8sClient.Create(ctx, trustMv)
@@ -644,6 +643,179 @@ var _ = Describe("Pod webhook", func() {
 
 			By("Cleanup override namespace")
 			_ = k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: overrideTestNamespace}})
+		})
+
+		It("Should use configured ImagePullPolicy for init container", func() {
+			pullPolicyTestName := "pull-policy-test"
+			pullPolicyTestNamespace := fmt.Sprintf("pull-policy-ns-%d", time.Now().UnixNano())
+
+			By("Creating the Namespace for pull policy test")
+			pullPolicyNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: pullPolicyTestNamespace,
+				},
+			}
+			err := k8sClient.Create(ctx, pullPolicyNs)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Create ModelValidation with IfNotPresent ImagePullPolicy")
+			pullPolicyMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
+				Name:           pullPolicyTestName,
+				Namespace:      pullPolicyTestNamespace,
+				ConfigType:     "sigstore",
+				CertIdentity:   "pullpolicy@example.com",
+				CertOidcIssuer: "https://accounts.google.com",
+			})
+			pullPolicyMv.Spec.ImagePullPolicy = corev1.PullIfNotPresent
+			err = k8sClient.Create(ctx, pullPolicyMv)
+			Expect(err).To(Not(HaveOccurred()))
+
+			statusTracker.AddModelValidation(ctx, pullPolicyMv)
+
+			By("create labeled pod")
+			pullPolicyPod := testutil.CreateTestPod(testutil.TestPodOptions{
+				Name:      "pull-policy-pod",
+				Namespace: pullPolicyTestNamespace,
+				Labels:    map[string]string{constants.ModelValidationLabel: pullPolicyTestName},
+			})
+			err = k8sClient.Create(ctx, pullPolicyPod)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Checking that init container has IfNotPresent pull policy")
+			foundPullPolicyPod := &corev1.Pod{}
+			Eventually(ctx, func(ctx context.Context) corev1.PullPolicy {
+				_ = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "pull-policy-pod",
+					Namespace: pullPolicyTestNamespace,
+				}, foundPullPolicyPod)
+				if len(foundPullPolicyPod.Spec.InitContainers) == 0 {
+					return ""
+				}
+				return foundPullPolicyPod.Spec.InitContainers[0].ImagePullPolicy
+			}, 5*time.Second).Should(Equal(corev1.PullIfNotPresent))
+
+			By("Cleanup pull policy namespace")
+			_ = k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: pullPolicyTestNamespace}})
+		})
+
+		It("Should apply default resource requests and limits", func() {
+			defaultResTestName := "default-res-test"
+			defaultResTestNamespace := fmt.Sprintf("default-res-ns-%d", time.Now().UnixNano())
+
+			By("Creating the Namespace for default resources test")
+			defaultResNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: defaultResTestNamespace,
+				},
+			}
+			err := k8sClient.Create(ctx, defaultResNs)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Create ModelValidation without resources")
+			defaultResMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
+				Name:           defaultResTestName,
+				Namespace:      defaultResTestNamespace,
+				ConfigType:     "sigstore",
+				CertIdentity:   "defaultres@example.com",
+				CertOidcIssuer: "https://accounts.google.com",
+			})
+			err = k8sClient.Create(ctx, defaultResMv)
+			Expect(err).To(Not(HaveOccurred()))
+
+			statusTracker.AddModelValidation(ctx, defaultResMv)
+
+			By("create labeled pod")
+			defaultResPod := testutil.CreateTestPod(testutil.TestPodOptions{
+				Name:      "default-res-pod",
+				Namespace: defaultResTestNamespace,
+				Labels:    map[string]string{constants.ModelValidationLabel: defaultResTestName},
+			})
+			err = k8sClient.Create(ctx, defaultResPod)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Checking that init container has default resource requirements")
+			foundDefaultResPod := &corev1.Pod{}
+			Eventually(ctx, func(ctx context.Context) []corev1.Container {
+				_ = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "default-res-pod",
+					Namespace: defaultResTestNamespace,
+				}, foundDefaultResPod)
+				return foundDefaultResPod.Spec.InitContainers
+			}, 5*time.Second).Should(HaveLen(1))
+
+			initContainer := foundDefaultResPod.Spec.InitContainers[0]
+			Expect(initContainer.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("100m")))
+			Expect(initContainer.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("128Mi")))
+			Expect(initContainer.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("1")))
+			Expect(initContainer.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("512Mi")))
+
+			By("Cleanup default resources namespace")
+			_ = k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: defaultResTestNamespace}})
+		})
+
+		It("Should use custom resource requests and limits when specified", func() {
+			customResTestName := "custom-res-test"
+			customResTestNamespace := fmt.Sprintf("custom-res-ns-%d", time.Now().UnixNano())
+
+			By("Creating the Namespace for custom resources test")
+			customResNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: customResTestNamespace,
+				},
+			}
+			err := k8sClient.Create(ctx, customResNs)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Create ModelValidation with custom resources")
+			customResMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
+				Name:           customResTestName,
+				Namespace:      customResTestNamespace,
+				ConfigType:     "sigstore",
+				CertIdentity:   "customres@example.com",
+				CertOidcIssuer: "https://accounts.google.com",
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("250m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				},
+			})
+			err = k8sClient.Create(ctx, customResMv)
+			Expect(err).To(Not(HaveOccurred()))
+
+			statusTracker.AddModelValidation(ctx, customResMv)
+
+			By("create labeled pod")
+			customResPod := testutil.CreateTestPod(testutil.TestPodOptions{
+				Name:      "custom-res-pod",
+				Namespace: customResTestNamespace,
+				Labels:    map[string]string{constants.ModelValidationLabel: customResTestName},
+			})
+			err = k8sClient.Create(ctx, customResPod)
+			Expect(err).To(Not(HaveOccurred()))
+
+			By("Checking that init container has custom resource requirements")
+			foundCustomResPod := &corev1.Pod{}
+			Eventually(ctx, func(ctx context.Context) []corev1.Container {
+				_ = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "custom-res-pod",
+					Namespace: customResTestNamespace,
+				}, foundCustomResPod)
+				return foundCustomResPod.Spec.InitContainers
+			}, 5*time.Second).Should(HaveLen(1))
+
+			initContainer := foundCustomResPod.Spec.InitContainers[0]
+			Expect(initContainer.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("250m")))
+			Expect(initContainer.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("256Mi")))
+			Expect(initContainer.Resources.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
+			Expect(initContainer.Resources.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("1Gi")))
+
+			By("Cleanup custom resources namespace")
+			_ = k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: customResTestNamespace}})
 		})
 	})
 })

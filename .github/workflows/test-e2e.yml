@@ -18,16 +18,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@def8c394e3ad351a79bc93815e4a585520fe993b # v5
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Create kind cluster
-        uses: helm/kind-action@v1
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
         with:
           cluster_name: kind
 
@@ -42,4 +42,4 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          make test-e2e-ci MODEL_TRANSPARENCY_IMG=${{ env.MODEL_TRANSPARENCY_IMG }}
+          make test-e2e-ci
