@@ -175,16 +175,6 @@ type PodTrackingInfo struct {
 	InjectedAt metav1.Time `json:"injectedAt"`
 }
 
-// PodTrackingInfo contains information about a tracked pod
-type PodTrackingInfo struct {
-	// Name is the name of the pod
-	Name string `json:"name"`
-	// UID is the unique identifier of the pod
-	UID string `json:"uid"`
-	// InjectedAt is when the pod was injected
-	InjectedAt metav1.Time `json:"injectedAt"`
-}
-
 // ModelValidationStatus defines the observed state of ModelValidation
 type ModelValidationStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

@@ -1,0 +1,35 @@
+# Build the validation-agent binary
+FROM registry.redhat.io/ubi9/go-toolset:9.7@sha256:799cc027d5ad58cdc156b65286eb6389993ec14c496cf748c09834b7251e78dc AS agent-builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd/validation-agent/ cmd/validation-agent/
+COPY internal/ internal/
+COPY api/ api/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -a -o validation-agent cmd/validation-agent/main.go
+
+# Use minimal base image to package the validation-agent binary
+FROM registry.access.redhat.com/ubi9-minimal@sha256:c7d44146f826037f6873d99da479299b889473492d3c1ab8af86f08af04ec8a0
+
+WORKDIR /
+
+COPY --from=agent-builder /workspace/validation-agent /usr/local/bin/
+
+USER 65532:65532
+
+LABEL description="The image for the model-validation agent."
+LABEL io.k8s.description="The image for the model-validation agent."
+LABEL io.k8s.display-name="Model validation agent container image for Red Hat Trusted Artifact Signer."
+LABEL io.openshift.tags="model-validation-agent, Red Hat Trusted Artifact Signer."
+LABEL summary="Validation agent for the model-validation operator."
+LABEL com.redhat.component="model-validation-agent"
+LABEL name="rhtas/model-validation-rhel9-agent"
+
+ENTRYPOINT ["/usr/local/bin/validation-agent"]
