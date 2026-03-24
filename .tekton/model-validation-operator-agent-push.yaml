@@ -25,9 +25,9 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/securesign/model-validation-operator:{{revision}}
+    value: quay.io/securesign/model-validation-operator-agent:{{revision}}
   - name: dockerfile
-    value: Dockerfile.model-validation.rh
+    value: Dockerfile.model-validation-agent.rh
   - name: path-context
     value: .
   - name: build-platforms
