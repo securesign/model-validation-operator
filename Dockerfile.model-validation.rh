@@ -18,7 +18,7 @@ COPY api/ api/
 COPY internal/ internal/
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a \
-    -ldflags="-X github.com/sigstore/model-validation-operator/internal/constants.ModelValidationAgentImage=${AGENT_IMG}" \
+    -ldflags="-X github.com/securesign/model-validation-operator/internal/constants.ModelValidationAgentImage=${AGENT_IMG}" \
     -o manager cmd/main.go
 
 # Use minimal base image to package the manager binary

@@ -43,12 +43,14 @@ spec:
     value: appstudio.openshift.io/application=model-validation-operator,appstudio.openshift.io/component=model-validation-operator-agent,pipelinesascode.tekton.dev/sha={{revision}},pipelinesascode.tekton.dev/event-type=push
   - name: manager-registry-url
     value: registry.redhat.io/rhtas/model-validation-rhel9-operator-agent
+  - name: manager-build-arg-name
+    value: AGENT_IMG
   pipelineRef:
     params:
     - name: url
       value: https://github.com/securesign/pipelines.git
     - name: revision
-      value: main
+      value: add-manager-support-docker-build
     - name: pathInRepo
       value: pipelines/docker-build-multi-platform-oci-ta.yaml
     resolver: git
