@@ -13,7 +13,7 @@ metadata:
     appstudio.openshift.io/application: model-validation-operator
     appstudio.openshift.io/component: model-validation-operator-agent
     pipelines.appstudio.openshift.io/type: build
-  name: model-validation-operator-on-pull-request
+  name: model-validation-operator-agent-on-pull-request
   namespace: rhtas-tenant
 spec:
   params:
