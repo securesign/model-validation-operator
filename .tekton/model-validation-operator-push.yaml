@@ -39,6 +39,10 @@ spec:
     value: "true"
   - name: prefetch-input
     value: '{"type": "gomod", "path": "."}'
+  - name: manager-pipelinerun-selector
+    value: appstudio.openshift.io/application=model-validation-operator,appstudio.openshift.io/component=model-validation-operator-agent,pipelinesascode.tekton.dev/sha={{revision}},pipelinesascode.tekton.dev/event-type=push
+  - name: manager-registry-url
+    value: registry.redhat.io/rhtas/model-validation-rhel9-operator-agent
   pipelineRef:
     params:
     - name: url
