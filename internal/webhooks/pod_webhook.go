@@ -154,6 +154,9 @@ func buildValidationContainer(
 		Command:         []string{"/usr/local/bin/validation-agent"},
 		Args:            args,
 		VolumeMounts:    vm,
+		Env: []corev1.EnvVar{
+			{Name: "HOME", Value: "/tmp"},
+		},
 	}
 
 	// Add continuous validation configuration if enabled
