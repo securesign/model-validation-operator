@@ -1,6 +1,6 @@
-ARG VERSION="0.0.3"
-ARG CHANNELS="tech-preview"
-ARG DEFAULT_CHANNEL="tech-preview"
+ARG VERSION="1.0.0"
+ARG CHANNELS="stable"
+ARG DEFAULT_CHANNEL="stable"
 ARG BUNDLE_OVERLAY="olm"
 ARG BUNDLE_GEN_FLAGS="-q --overwrite=false --version $VERSION --channels=$CHANNELS --default-channel=$DEFAULT_CHANNEL"
 ARG IMG
