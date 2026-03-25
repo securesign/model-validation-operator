@@ -18,7 +18,7 @@ metadata:
     operators.openshift.io/valid-subscription: '["Red Hat Trusted Artifact Signer"]'
     repository: https://github.com/securesign/model-validation-operator
     support: Red Hat
-  name: model-validation-operator.v0.0.3
+  name: model-validation-operator.v1.0.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -65,8 +65,8 @@ spec:
     name: Aleksy Siek
   - email: kconner@redhat.com
     name: Kevin Conner
-  maturity: tech-preview
+  maturity: stable
   minKubeVersion: 1.24.0
   provider:
     name: Red Hat
-  version: 0.0.3-techpreview
+  version: 1.0.0
