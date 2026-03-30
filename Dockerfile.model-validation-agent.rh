@@ -30,6 +30,6 @@ LABEL io.k8s.display-name="Model validation agent container image for Red Hat Tr
 LABEL io.openshift.tags="model-validation-agent, Red Hat Trusted Artifact Signer."
 LABEL summary="Validation agent for the model-validation operator."
 LABEL com.redhat.component="model-validation-agent"
-LABEL name="rhtas/model-validation-rhel9-agent"
+LABEL name="rhtas/model-validation-agent-rhel9"
 
 ENTRYPOINT ["/usr/local/bin/validation-agent"]
