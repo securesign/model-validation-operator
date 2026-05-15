@@ -3,7 +3,6 @@
 /bin
 
 cover.out
-coverage.out
 # editor and IDE paraphernalia
 .idea
 .vscode
