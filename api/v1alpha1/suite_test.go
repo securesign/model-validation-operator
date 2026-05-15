@@ -61,7 +61,9 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
-	Expect(testEnv.Stop()).To(Succeed())
+	if testEnv != nil {
+		Expect(testEnv.Stop()).To(Succeed())
+	}
 })
 
 func getKey(instance v1.Object) types.NamespacedName {

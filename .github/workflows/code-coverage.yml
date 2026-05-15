@@ -1,0 +1,41 @@
+name: Code Coverage
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  coverage:
+    name: Upload coverage to Codecov
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Setup envtest
+        run: |
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(go list -m -f '{{ .Version }}' sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $2, $3}')
+          ENVTEST_K8S_VERSION=$(go list -m -f '{{ .Version }}' k8s.io/api | awk -F'[v.]' '{printf "1.%d", $3}')
+          echo "KUBEBUILDER_ASSETS=$(setup-envtest use ${ENVTEST_K8S_VERSION} --bin-dir $(pwd)/bin -p path)" >> "$GITHUB_ENV"
+
+      - name: Run tests with coverage
+        run: go test -v -coverprofile=coverage.out $(go list ./... | grep -v /e2e)
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        with:
+          files: coverage.out
+          flags: unit
+          use_oidc: true
+          fail_ci_if_error: true

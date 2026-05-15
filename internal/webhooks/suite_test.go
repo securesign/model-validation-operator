@@ -105,23 +105,23 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 
-	binaryAssetsDir, err := findBinaryAssetsDirectory()
-	if err != nil {
-		Fail(fmt.Sprintf("Failed to locate Kubernetes binary assets: %v\n"+
-			"Please run 'make setup-envtest' to download the required binaries.", err))
-	}
-
-	By(fmt.Sprintf("Using binary assets directory: %s", binaryAssetsDir))
-
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
-
-		BinaryAssetsDirectory: binaryAssetsDir,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{Paths: []string{filepath.Join("..", "..", "config", "webhook")}},
 	}
 
-	// cfg is defined in this file globally.
+	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
+		binaryAssetsDir, err := findBinaryAssetsDirectory()
+		if err != nil {
+			Fail(fmt.Sprintf("Failed to locate Kubernetes binary assets: %v\n"+
+				"Please run 'make setup-envtest' to download the required binaries.", err))
+		}
+		By(fmt.Sprintf("Using binary assets directory: %s", binaryAssetsDir))
+		testEnv.BinaryAssetsDirectory = binaryAssetsDir
+	}
+
+	var err error
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
@@ -178,12 +178,16 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 
-	statusTracker.Stop()
+	if statusTracker != nil {
+		statusTracker.Stop()
+	}
 	cancel()
 
 	// Give manager time to shutdown gracefully
 	time.Sleep(100 * time.Millisecond)
 
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
+	if testEnv != nil {
+		err := testEnv.Stop()
+		Expect(err).NotTo(HaveOccurred())
+	}
 })
