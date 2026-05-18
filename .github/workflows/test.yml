@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   test:
     name: Run on Ubuntu
@@ -22,3 +26,11 @@ jobs:
       - name: Running Tests
         run: |
           make test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        with:
+          files: cover.out
+          flags: unit
+          use_oidc: true
+          fail_ci_if_error: true
