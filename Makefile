@@ -3,7 +3,7 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.1.0
+VERSION ?= 0.2.0
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -36,7 +36,7 @@ IMG ?= $(IMAGE_TAG_BASE):v$(VERSION)
 
 # AGENT_IMG defines the image:tag used for the validation agent.
 # This is injected into the operator binary via ldflags at build time.
-AGENT_IMG ?= ghcr.io/sigstore/model-validation-agent:v0.1.0
+AGENT_IMG ?= ghcr.io/sigstore/model-validation-agent:v0.2.0
 
 # LDFLAGS to inject the agent image into the operator binary
 LDFLAGS := -X github.com/sigstore/model-validation-operator/internal/constants.ModelValidationAgentImage=$(AGENT_IMG)
