@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM registry.redhat.io/ubi9/go-toolset:9.7-1775724628@sha256:a5c9eaea7dd305d0c79a0ff5c620c1c7a0cff87335684ae216205faca70458f3 AS builder
+FROM registry.redhat.io/ubi9/go-toolset:9.8-1782910875@sha256:bde70c31ef7393111dbcc7bdffb72975dd301b7493f1818fb7ae2617dba4d8df AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG AGENT_IMG
@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a \
     -o manager cmd/main.go
 
 # Use minimal base image to package the manager binary
-FROM registry.access.redhat.com/ubi9/ubi-minimal@sha256:d91be7cea9f03a757d69ad7fcdfcd7849dba820110e7980d5e2a1f46ed06ea3b
+FROM registry.access.redhat.com/ubi9/ubi-minimal@sha256:463cae32c6f6f5594b11a5c22de275016bd8545ce58a6373388e8b24f13fc15c
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
