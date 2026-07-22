@@ -46,6 +46,7 @@ jobs:
 
   test-e2e-olm-upgrade:
     name: Test OLM upgrade
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
