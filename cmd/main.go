@@ -18,8 +18,10 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sigstore/model-validation-operator/internal/constants"
@@ -318,9 +320,38 @@ func main() {
 		os.Exit(1)
 	}
 
+	operatorNamespace := getOperatorNamespace()
+	if operatorNamespace == "" {
+		setupLog.Error(fmt.Errorf("operator namespace not found"), "set POD_NAMESPACE env var or run in-cluster")
+		os.Exit(1)
+	}
+
+	npReconciler := &controller.NetworkPolicyReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Namespace: operatorNamespace,
+	}
+	if err := npReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create NetworkPolicy controller")
+		os.Exit(1)
+	}
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+const namespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+
+func getOperatorNamespace() string {
+	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
+		return ns
+	}
+	data, err := os.ReadFile(namespaceFile)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }
