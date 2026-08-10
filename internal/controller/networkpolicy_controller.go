@@ -82,17 +82,9 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 			networkingv1.PolicyTypeEgress,
 		},
 		Ingress: []networkingv1.NetworkPolicyIngressRule{
-			// Webhook: only the API server (represented via the default namespace) calls this.
+			// Webhook: the kube-apiserver runs on the host network, so no
+			// pod/namespace selector can match it — restrict by port only.
 			{
-				From: []networkingv1.NetworkPolicyPeer{
-					{
-						NamespaceSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{
-								"kubernetes.io/metadata.name": "default",
-							},
-						},
-					},
-				},
 				Ports: []networkingv1.NetworkPolicyPort{
 					{Port: &port9443, Protocol: &protocolTCP},
 				},
@@ -152,17 +144,9 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 					{Port: &port53, Protocol: &protocolUDP},
 				},
 			},
-			// Kubernetes API server.
+			// Kubernetes API server: the apiserver uses host networking, so
+			// namespace selectors cannot match the destination — restrict by port only.
 			{
-				To: []networkingv1.NetworkPolicyPeer{
-					{
-						NamespaceSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{
-								"kubernetes.io/metadata.name": "default",
-							},
-						},
-					},
-				},
 				Ports: []networkingv1.NetworkPolicyPort{
 					{Port: &port443, Protocol: &protocolTCP},
 					{Port: &port6443, Protocol: &protocolTCP},

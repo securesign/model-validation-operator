@@ -59,11 +59,8 @@ var _ = Describe("NetworkPolicyReconciler", func() {
 
 			Expect(np.Spec.Ingress).To(HaveLen(3))
 
-			By("webhook ingress scoped to the default namespace")
-			Expect(np.Spec.Ingress[0].From).To(HaveLen(1))
-			Expect(np.Spec.Ingress[0].From[0].NamespaceSelector).NotTo(BeNil())
-			Expect(np.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels).To(
-				HaveKeyWithValue("kubernetes.io/metadata.name", "default"))
+			By("webhook ingress restricted by port only (apiserver uses host network)")
+			Expect(np.Spec.Ingress[0].From).To(BeEmpty())
 			expectPort(np.Spec.Ingress[0].Ports, 9443, corev1.ProtocolTCP)
 
 			By("health probe ingress scoped to same-namespace pods")
@@ -88,10 +85,8 @@ var _ = Describe("NetworkPolicyReconciler", func() {
 			expectPort(np.Spec.Egress[0].Ports, 53, corev1.ProtocolTCP)
 			expectPort(np.Spec.Egress[0].Ports, 53, corev1.ProtocolUDP)
 
-			By("API server egress scoped to the default namespace")
-			Expect(np.Spec.Egress[1].To).To(HaveLen(1))
-			Expect(np.Spec.Egress[1].To[0].NamespaceSelector.MatchLabels).To(
-				HaveKeyWithValue("kubernetes.io/metadata.name", "default"))
+			By("API server egress restricted by port only (apiserver uses host network)")
+			Expect(np.Spec.Egress[1].To).To(BeEmpty())
 			expectPort(np.Spec.Egress[1].Ports, 443, corev1.ProtocolTCP)
 			expectPort(np.Spec.Egress[1].Ports, 6443, corev1.ProtocolTCP)
 		})
