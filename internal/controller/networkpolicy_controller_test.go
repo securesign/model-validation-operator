@@ -71,10 +71,11 @@ var _ = Describe("NetworkPolicyReconciler", func() {
 			Expect(np.Spec.Ingress[1].From[0].PodSelector).NotTo(BeNil())
 			expectPort(np.Spec.Ingress[1].Ports, 8081, corev1.ProtocolTCP)
 
-			By("metrics ingress scoped to metrics-enabled namespaces")
-			Expect(np.Spec.Ingress[2].From).To(HaveLen(1))
-			Expect(np.Spec.Ingress[2].From[0].NamespaceSelector).NotTo(BeNil())
-			Expect(np.Spec.Ingress[2].From[0].NamespaceSelector.MatchLabels).To(HaveKeyWithValue("metrics", "enabled"))
+			By("metrics ingress scoped to same-namespace pods and metrics-enabled namespaces")
+			Expect(np.Spec.Ingress[2].From).To(HaveLen(2))
+			Expect(np.Spec.Ingress[2].From[0].PodSelector).NotTo(BeNil())
+			Expect(np.Spec.Ingress[2].From[1].NamespaceSelector).NotTo(BeNil())
+			Expect(np.Spec.Ingress[2].From[1].NamespaceSelector.MatchLabels).To(HaveKeyWithValue("metrics", "enabled"))
 			expectPort(np.Spec.Ingress[2].Ports, 8443, corev1.ProtocolTCP)
 
 			By("DNS egress scoped to kube-system and openshift-dns")

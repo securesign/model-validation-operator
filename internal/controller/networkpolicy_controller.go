@@ -109,9 +109,12 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 					{Port: &port8081, Protocol: &protocolTCP},
 				},
 			},
-			// Metrics: scoped to namespaces labeled metrics=enabled.
+			// Metrics: same-namespace pods and namespaces labeled metrics=enabled.
 			{
 				From: []networkingv1.NetworkPolicyPeer{
+					{
+						PodSelector: &metav1.LabelSelector{},
+					},
 					{
 						NamespaceSelector: &metav1.LabelSelector{
 							MatchLabels: map[string]string{
