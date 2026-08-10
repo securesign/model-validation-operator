@@ -18,7 +18,6 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -322,18 +321,17 @@ func main() {
 
 	operatorNamespace := getOperatorNamespace()
 	if operatorNamespace == "" {
-		setupLog.Error(fmt.Errorf("operator namespace not found"), "set POD_NAMESPACE env var or run in-cluster")
-		os.Exit(1)
-	}
-
-	npReconciler := &controller.NetworkPolicyReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Namespace: operatorNamespace,
-	}
-	if err := npReconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create NetworkPolicy controller")
-		os.Exit(1)
+		setupLog.Info("operator namespace not found, skipping NetworkPolicy controller (set POD_NAMESPACE for local runs)")
+	} else {
+		npReconciler := &controller.NetworkPolicyReconciler{
+			Client:    mgr.GetClient(),
+			Scheme:    mgr.GetScheme(),
+			Namespace: operatorNamespace,
+		}
+		if err := npReconciler.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create NetworkPolicy controller")
+			os.Exit(1)
+		}
 	}
 
 	setupLog.Info("starting manager")

@@ -65,6 +65,7 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 	port443 := intstr.FromInt32(443)
 	port6443 := intstr.FromInt32(6443)
 	port8081 := intstr.FromInt32(8081)
+	port8443 := intstr.FromInt32(8443)
 	port9443 := intstr.FromInt32(9443)
 	protocolTCP := corev1.ProtocolTCP
 	protocolUDP := corev1.ProtocolUDP
@@ -81,21 +82,84 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 			networkingv1.PolicyTypeEgress,
 		},
 		Ingress: []networkingv1.NetworkPolicyIngressRule{
+			// Webhook: only the API server (represented via the default namespace) calls this.
 			{
+				From: []networkingv1.NetworkPolicyPeer{
+					{
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"kubernetes.io/metadata.name": "default",
+							},
+						},
+					},
+				},
 				Ports: []networkingv1.NetworkPolicyPort{
 					{Port: &port9443, Protocol: &protocolTCP},
+				},
+			},
+			// Health probes: kubelet traffic is not subject to NetworkPolicy, but
+			// in-cluster liveness checks (e.g. from the same namespace) need access.
+			{
+				From: []networkingv1.NetworkPolicyPeer{
+					{
+						PodSelector: &metav1.LabelSelector{},
+					},
+				},
+				Ports: []networkingv1.NetworkPolicyPort{
 					{Port: &port8081, Protocol: &protocolTCP},
+				},
+			},
+			// Metrics: scoped to namespaces labeled metrics=enabled.
+			{
+				From: []networkingv1.NetworkPolicyPeer{
+					{
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"metrics": "enabled",
+							},
+						},
+					},
+				},
+				Ports: []networkingv1.NetworkPolicyPort{
+					{Port: &port8443, Protocol: &protocolTCP},
 				},
 			},
 		},
 		Egress: []networkingv1.NetworkPolicyEgressRule{
+			// DNS: scoped to kube-system (vanilla K8s) and openshift-dns (OpenShift).
 			{
+				To: []networkingv1.NetworkPolicyPeer{
+					{
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"kubernetes.io/metadata.name": "kube-system",
+							},
+						},
+					},
+					{
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"kubernetes.io/metadata.name": "openshift-dns",
+							},
+						},
+					},
+				},
 				Ports: []networkingv1.NetworkPolicyPort{
 					{Port: &port53, Protocol: &protocolTCP},
 					{Port: &port53, Protocol: &protocolUDP},
 				},
 			},
+			// Kubernetes API server.
 			{
+				To: []networkingv1.NetworkPolicyPeer{
+					{
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"kubernetes.io/metadata.name": "default",
+							},
+						},
+					},
+				},
 				Ports: []networkingv1.NetworkPolicyPort{
 					{Port: &port443, Protocol: &protocolTCP},
 					{Port: &port6443, Protocol: &protocolTCP},

@@ -57,13 +57,40 @@ var _ = Describe("NetworkPolicyReconciler", func() {
 				networkingv1.PolicyTypeEgress,
 			))
 
-			Expect(np.Spec.Ingress).To(HaveLen(1))
-			expectPort(np.Spec.Ingress[0].Ports, 9443, corev1.ProtocolTCP)
-			expectPort(np.Spec.Ingress[0].Ports, 8081, corev1.ProtocolTCP)
+			Expect(np.Spec.Ingress).To(HaveLen(3))
 
+			By("webhook ingress scoped to the default namespace")
+			Expect(np.Spec.Ingress[0].From).To(HaveLen(1))
+			Expect(np.Spec.Ingress[0].From[0].NamespaceSelector).NotTo(BeNil())
+			Expect(np.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels).To(
+				HaveKeyWithValue("kubernetes.io/metadata.name", "default"))
+			expectPort(np.Spec.Ingress[0].Ports, 9443, corev1.ProtocolTCP)
+
+			By("health probe ingress scoped to same-namespace pods")
+			Expect(np.Spec.Ingress[1].From).To(HaveLen(1))
+			Expect(np.Spec.Ingress[1].From[0].PodSelector).NotTo(BeNil())
+			expectPort(np.Spec.Ingress[1].Ports, 8081, corev1.ProtocolTCP)
+
+			By("metrics ingress scoped to metrics-enabled namespaces")
+			Expect(np.Spec.Ingress[2].From).To(HaveLen(1))
+			Expect(np.Spec.Ingress[2].From[0].NamespaceSelector).NotTo(BeNil())
+			Expect(np.Spec.Ingress[2].From[0].NamespaceSelector.MatchLabels).To(HaveKeyWithValue("metrics", "enabled"))
+			expectPort(np.Spec.Ingress[2].Ports, 8443, corev1.ProtocolTCP)
+
+			By("DNS egress scoped to kube-system and openshift-dns")
 			Expect(np.Spec.Egress).To(HaveLen(2))
+			Expect(np.Spec.Egress[0].To).To(HaveLen(2))
+			Expect(np.Spec.Egress[0].To[0].NamespaceSelector.MatchLabels).To(
+				HaveKeyWithValue("kubernetes.io/metadata.name", "kube-system"))
+			Expect(np.Spec.Egress[0].To[1].NamespaceSelector.MatchLabels).To(
+				HaveKeyWithValue("kubernetes.io/metadata.name", "openshift-dns"))
 			expectPort(np.Spec.Egress[0].Ports, 53, corev1.ProtocolTCP)
 			expectPort(np.Spec.Egress[0].Ports, 53, corev1.ProtocolUDP)
+
+			By("API server egress scoped to the default namespace")
+			Expect(np.Spec.Egress[1].To).To(HaveLen(1))
+			Expect(np.Spec.Egress[1].To[0].NamespaceSelector.MatchLabels).To(
+				HaveKeyWithValue("kubernetes.io/metadata.name", "default"))
 			expectPort(np.Spec.Egress[1].Ports, 443, corev1.ProtocolTCP)
 			expectPort(np.Spec.Egress[1].Ports, 6443, corev1.ProtocolTCP)
 		})
@@ -104,7 +131,7 @@ var _ = Describe("NetworkPolicyReconciler", func() {
 				networkingv1.PolicyTypeEgress,
 			))
 			Expect(np.Spec.PodSelector.MatchLabels).To(HaveKeyWithValue("control-plane", "controller-manager"))
-			Expect(np.Spec.Ingress).To(HaveLen(1))
+			Expect(np.Spec.Ingress).To(HaveLen(3))
 			Expect(np.Spec.Egress).To(HaveLen(2))
 		})
 	})
@@ -132,7 +159,7 @@ var _ = Describe("NetworkPolicyReconciler", func() {
 			np := &networkingv1.NetworkPolicy{}
 			err = fakeClient.Get(ctx, types.NamespacedName{Name: networkPolicyName, Namespace: namespace}, np)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(np.Spec.Ingress).To(HaveLen(1))
+			Expect(np.Spec.Ingress).To(HaveLen(3))
 			Expect(np.Spec.Egress).To(HaveLen(2))
 		})
 	})
