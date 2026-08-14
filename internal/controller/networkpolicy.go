@@ -6,61 +6,47 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const networkPolicyName = "controller-manager"
 
-// NetworkPolicyReconciler ensures a static NetworkPolicy exists in the operator namespace,
-// restricting traffic to only the required endpoints.
-type NetworkPolicyReconciler struct {
-	client.Client
-	Scheme    *runtime.Scheme
-	Namespace string
-}
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;create;update;patch
 
-// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch
-
-// Reconcile ensures the operator's NetworkPolicy exists with the desired spec
-func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
+// InstallNetworkPolicy creates or updates the operator's NetworkPolicy once at startup.
+func InstallNetworkPolicy(ctx context.Context, c client.Client, namespace string) error {
 	logger := log.FromContext(ctx)
 
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      networkPolicyName,
-			Namespace: r.Namespace,
+			Namespace: namespace,
 		},
 	}
 
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, np, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, c, np, func() error {
 		np.Labels = map[string]string{
 			"app.kubernetes.io/name":       "model-validation-operator",
 			"app.kubernetes.io/managed-by": "model-validation-operator",
 		}
-		np.Spec = r.desiredSpec()
+		np.Spec = networkPolicySpec()
 		return nil
 	})
 	if err != nil {
-		logger.Error(err, "Failed to reconcile NetworkPolicy")
-		return ctrl.Result{}, err
+		return err
 	}
 
 	if result != controllerutil.OperationResultNone {
-		logger.Info("NetworkPolicy reconciled", "operation", result)
+		logger.Info("NetworkPolicy installed", "operation", result)
 	}
 
-	return ctrl.Result{}, nil
+	return nil
 }
 
-func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
+func networkPolicySpec() networkingv1.NetworkPolicySpec {
 	port53 := intstr.FromInt32(53)
 	port443 := intstr.FromInt32(443)
 	port6443 := intstr.FromInt32(6443)
@@ -82,15 +68,11 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 			networkingv1.PolicyTypeEgress,
 		},
 		Ingress: []networkingv1.NetworkPolicyIngressRule{
-			// Webhook: the kube-apiserver runs on the host network, so no
-			// pod/namespace selector can match it — restrict by port only.
 			{
 				Ports: []networkingv1.NetworkPolicyPort{
 					{Port: &port9443, Protocol: &protocolTCP},
 				},
 			},
-			// Health probes: kubelet traffic is not subject to NetworkPolicy, but
-			// in-cluster liveness checks (e.g. from the same namespace) need access.
 			{
 				From: []networkingv1.NetworkPolicyPeer{
 					{
@@ -101,7 +83,6 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 					{Port: &port8081, Protocol: &protocolTCP},
 				},
 			},
-			// Metrics: same-namespace pods and namespaces labeled metrics=enabled.
 			{
 				From: []networkingv1.NetworkPolicyPeer{
 					{
@@ -121,7 +102,6 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 			},
 		},
 		Egress: []networkingv1.NetworkPolicyEgressRule{
-			// DNS: scoped to kube-system (vanilla K8s) and openshift-dns (OpenShift).
 			{
 				To: []networkingv1.NetworkPolicyPeer{
 					{
@@ -144,8 +124,6 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 					{Port: &port53, Protocol: &protocolUDP},
 				},
 			},
-			// Kubernetes API server: the apiserver uses host networking, so
-			// namespace selectors cannot match the destination — restrict by port only.
 			{
 				Ports: []networkingv1.NetworkPolicyPort{
 					{Port: &port443, Protocol: &protocolTCP},
@@ -154,33 +132,4 @@ func (r *NetworkPolicyReconciler) desiredSpec() networkingv1.NetworkPolicySpec {
 			},
 		},
 	}
-}
-
-// SetupWithManager sets up the controller with the Manager
-func (r *NetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	isOurNetworkPolicy := func(_ context.Context, obj client.Object) []reconcile.Request {
-		if obj.GetName() == networkPolicyName && obj.GetNamespace() == r.Namespace {
-			return []reconcile.Request{{NamespacedName: types.NamespacedName{
-				Name:      networkPolicyName,
-				Namespace: r.Namespace,
-			}}}
-		}
-		return nil
-	}
-
-	isOurNamespace := func(_ context.Context, obj client.Object) []reconcile.Request {
-		if obj.GetName() == r.Namespace {
-			return []reconcile.Request{{NamespacedName: types.NamespacedName{
-				Name:      networkPolicyName,
-				Namespace: r.Namespace,
-			}}}
-		}
-		return nil
-	}
-
-	return ctrl.NewControllerManagedBy(mgr).
-		Named("networkpolicy").
-		Watches(&networkingv1.NetworkPolicy{}, handler.EnqueueRequestsFromMapFunc(isOurNetworkPolicy)).
-		Watches(&corev1.Namespace{}, handler.EnqueueRequestsFromMapFunc(isOurNamespace)).
-		Complete(r)
 }

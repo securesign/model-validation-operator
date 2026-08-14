@@ -10,16 +10,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-var _ = Describe("NetworkPolicyReconciler", func() {
+var _ = Describe("InstallNetworkPolicy", func() {
 	var (
-		ctx        context.Context
-		reconciler *NetworkPolicyReconciler
-		namespace  string
+		ctx       context.Context
+		namespace string
 	)
 
 	BeforeEach(func() {
@@ -31,16 +29,8 @@ var _ = Describe("NetworkPolicyReconciler", func() {
 		It("should create the NetworkPolicy with the correct spec", func() {
 			fakeClient := testutil.SetupFakeClientWithObjects()
 
-			reconciler = &NetworkPolicyReconciler{
-				Client:    fakeClient,
-				Scheme:    runtime.NewScheme(),
-				Namespace: namespace,
-			}
-
-			req := testutil.CreateReconcileRequest(namespace, networkPolicyName)
-			result, err := reconciler.Reconcile(ctx, req)
+			err := InstallNetworkPolicy(ctx, fakeClient, namespace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeZero())
 
 			np := &networkingv1.NetworkPolicy{}
 			err = fakeClient.Get(ctx, types.NamespacedName{Name: networkPolicyName, Namespace: namespace}, np)
@@ -107,16 +97,8 @@ var _ = Describe("NetworkPolicyReconciler", func() {
 
 			fakeClient := testutil.SetupFakeClientWithObjects(existingNP)
 
-			reconciler = &NetworkPolicyReconciler{
-				Client:    fakeClient,
-				Scheme:    runtime.NewScheme(),
-				Namespace: namespace,
-			}
-
-			req := testutil.CreateReconcileRequest(namespace, networkPolicyName)
-			result, err := reconciler.Reconcile(ctx, req)
+			err := InstallNetworkPolicy(ctx, fakeClient, namespace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeZero())
 
 			np := &networkingv1.NetworkPolicy{}
 			err = fakeClient.Get(ctx, types.NamespacedName{Name: networkPolicyName, Namespace: namespace}, np)
@@ -136,61 +118,17 @@ var _ = Describe("NetworkPolicyReconciler", func() {
 		It("should be idempotent and not error", func() {
 			fakeClient := testutil.SetupFakeClientWithObjects()
 
-			reconciler = &NetworkPolicyReconciler{
-				Client:    fakeClient,
-				Scheme:    runtime.NewScheme(),
-				Namespace: namespace,
-			}
-
-			req := testutil.CreateReconcileRequest(namespace, networkPolicyName)
-
-			result, err := reconciler.Reconcile(ctx, req)
+			err := InstallNetworkPolicy(ctx, fakeClient, namespace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeZero())
 
-			result, err = reconciler.Reconcile(ctx, req)
+			err = InstallNetworkPolicy(ctx, fakeClient, namespace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeZero())
 
 			np := &networkingv1.NetworkPolicy{}
 			err = fakeClient.Get(ctx, types.NamespacedName{Name: networkPolicyName, Namespace: namespace}, np)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(np.Spec.Ingress).To(HaveLen(3))
 			Expect(np.Spec.Egress).To(HaveLen(2))
-		})
-	})
-
-	Context("when the NetworkPolicy is deleted externally", func() {
-		It("should re-create the NetworkPolicy", func() {
-			fakeClient := testutil.SetupFakeClientWithObjects()
-
-			reconciler = &NetworkPolicyReconciler{
-				Client:    fakeClient,
-				Scheme:    runtime.NewScheme(),
-				Namespace: namespace,
-			}
-
-			req := testutil.CreateReconcileRequest(namespace, networkPolicyName)
-
-			_, err := reconciler.Reconcile(ctx, req)
-			Expect(err).NotTo(HaveOccurred())
-
-			np := &networkingv1.NetworkPolicy{}
-			err = fakeClient.Get(ctx, types.NamespacedName{Name: networkPolicyName, Namespace: namespace}, np)
-			Expect(err).NotTo(HaveOccurred())
-			err = fakeClient.Delete(ctx, np)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := reconciler.Reconcile(ctx, req)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeZero())
-
-			err = fakeClient.Get(ctx, types.NamespacedName{Name: networkPolicyName, Namespace: namespace}, np)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(np.Spec.PolicyTypes).To(ConsistOf(
-				networkingv1.PolicyTypeIngress,
-				networkingv1.PolicyTypeEgress,
-			))
 		})
 	})
 })
