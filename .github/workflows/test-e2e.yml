@@ -58,11 +58,16 @@ jobs:
       AGENT_IMG: ghcr.io/securesign/model-validation-operator-agent:dev-${{ github.sha }}
       BUNDLE_IMG: ghcr.io/securesign/model-validation-operator-bundle:dev-${{ github.sha }}
       CATALOG_IMG: ghcr.io/securesign/model-validation-operator-fbc:dev-${{ github.sha }}
-      OLM_UPGRADE_VERSION: 0.1.2
       OCP_VERSION: ${{ vars.OLM_INDEX_VERSION }}
     steps:
       - name: Checkout source
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+
+      - name: Compute OLM upgrade version
+        run: |
+          CURRENT=$(grep '^VERSION ?=' Makefile | cut -d= -f2 | tr -d ' ')
+          NEXT=$(echo "$CURRENT" | awk -F. '{print $1"."$2"."$3+1}')
+          echo "OLM_UPGRADE_VERSION=$NEXT" >> "$GITHUB_ENV"
 
       - name: Setup Go
         uses: actions/setup-go@def8c394e3ad351a79bc93815e4a585520fe993b # v5
