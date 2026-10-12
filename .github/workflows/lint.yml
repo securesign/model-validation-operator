@@ -11,12 +11,18 @@ permissions:
 
 jobs:
   lint:
-    name: Run Linting
+    name: Lint (${{ matrix.tags || 'default' }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tags: ["", "integration", "ha", "upgrade", "coverage"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@def8c394e3ad351a79bc93815e4a585520fe993b # v5
@@ -28,4 +34,76 @@ jobs:
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
           version: v2.4.0
-          args: --timeout=5m --issues-exit-code=0 --verbose
+          # Build with the go.mod toolchain, not a release binary built with an older Go.
+          install-mode: goinstall
+          args: --timeout=5m --issues-exit-code=1 --verbose --build-tags=${{ matrix.tags }}
+
+      - name: Test OLM configuration and lifecycle helpers without a cluster
+        if: matrix.tags == 'upgrade'
+        run: >-
+          go test -race -count=1 -tags=upgrade ./test/e2e-olm/
+          -run '^(TestUpgradeConfig.*|TestControllerRollout|TestCatalogTemplate|TestExistingCSVs|TestCleanup.*|TestSubscriptionCSVNames)$'
+
+      - name: Test metrics Pod security template without a cluster
+        if: matrix.tags == 'integration'
+        run: go test -race -count=1 -tags=integration ./test/e2e/ -run '^TestMetricsPodSecurityTemplate$'
+
+      - name: Test coverage collector failure handling and process restart retention
+        if: matrix.tags == ''
+        run: make test-coverage-collector
+
+  crd-compatibility:
+    name: CRD generation and backward compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@def8c394e3ad351a79bc93815e4a585520fe993b # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Generate and verify committed manifests are current
+        run: |
+          make manifests generate
+          git diff --exit-code -- config/crd/bases config/rbac config/webhook api
+          untracked=$(git ls-files --others --exclude-standard -- config/crd/bases config/rbac config/webhook api)
+          if [[ -n "$untracked" ]]; then
+            echo "Generated artifacts are missing from Git:"
+            printf '%s\n' "$untracked"
+            exit 1
+          fi
+
+      - name: Install crdify
+        run: go install sigs.k8s.io/crdify@v0.6.0
+
+      - name: Check CRD backward compatibility
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "No previous revision is available; skipping CRD comparison"
+            exit 0
+          fi
+          git show "$BASE_SHA:config/crd/bases/ml.sigstore.dev_modelvalidations.yaml" > /tmp/base-crd.yaml
+          crdify --config crdify.yaml \
+            file:///tmp/base-crd.yaml \
+            file://config/crd/bases/ml.sigstore.dev_modelvalidations.yaml
+
+  lint-gate:
+    # Preserve the existing required-check name while requiring every partition
+    # and the new generated-schema/compatibility gate to pass.
+    name: Run Linting
+    if: ${{ always() }}
+    needs: [lint, crd-compatibility]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all lint and CRD checks to pass
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+          CRD_RESULT: ${{ needs.crd-compatibility.result }}
+        run: test "$LINT_RESULT" = success && test "$CRD_RESULT" = success

@@ -1,3 +1,5 @@
+//go:build integration
+
 // Copyright 2025 The Sigstore Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,10 +32,10 @@ import (
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "model-validation-operator-metrics-binding"
 
-// curlMetricsPodName is the name of the pod used to access the metrics endpoint
-const curlMetricsPodName = "curl-metrics"
-
 const e2eTestPodName = "e2e-test-pod"
+
+//go:embed testdata/clusterrolebinding_template.yaml
+var clusterRoleBindingTemplate []byte
 
 var _ = Describe("Manager", Ordered, func() {
 	Context("Manager", func() {
@@ -53,7 +55,7 @@ var _ = Describe("Manager", Ordered, func() {
 				podOutput, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve controller-manager pod information")
 				podNames := utils.GetNonEmptyLines(podOutput)
-				g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
+				g.Expect(podNames).NotTo(BeEmpty(), "expected at least 1 controller pod running")
 				controllerPodName = podNames[0]
 				g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
 

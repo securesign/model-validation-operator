@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -120,23 +121,36 @@ type SubscriptionTemplateData struct {
 
 // Run executes the provided command within this context
 func Run(cmd *exec.Cmd) (string, error) {
-	dir, _ := GetProjectDir()
-	cmd.Dir = dir
-
-	if err := os.Chdir(cmd.Dir); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "chdir dir: %s\n", err)
+	if cmd.Dir == "" {
+		dir, err := GetProjectDir()
+		if err != nil {
+			return "", err
+		}
+		cmd.Dir = dir
 	}
 
-	cmd.Env = append(os.Environ(), "GO111MODULE=on")
-	command := strings.Join(cmd.Args, " ")
+	if cmd.Env == nil {
+		cmd.Env = append(os.Environ(), "GO111MODULE=on")
+	}
+	command := redactCommand(strings.Join(cmd.Args, " "))
 	_, _ = fmt.Fprintf(GinkgoWriter, "running: %s\n", command)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("%s failed with error: (%v) %s",
-			command, err, string(output))
+			command, err, redactCommand(string(output)))
 	}
 
 	return string(output), nil
+}
+
+var (
+	bearerPattern     = regexp.MustCompile(`(?i)(Bearer\s+)[^\s'";]+`)
+	secretFlagPattern = regexp.MustCompile(`(?i)(--(?:token|password)(?:=|\s+))[^\s'";]+`)
+)
+
+func redactCommand(command string) string {
+	command = bearerPattern.ReplaceAllString(command, "${1}[REDACTED]")
+	return secretFlagPattern.ReplaceAllString(command, "${1}[REDACTED]")
 }
 
 // GetNonEmptyLines converts given command output string into individual objects
@@ -232,7 +246,7 @@ func KubectlDelete(yamlData []byte, opts *KubectlDeleteOptions) error {
 // KubectlGet retrieves a Kubernetes resource and returns the output
 // If name is empty, retrieves all resources of the specified type
 func KubectlGet(resource, name, namespace string, outputFormat string) (string, error) {
-	args := []string{"get", resource}
+	args := []string{"get", resource, "--request-timeout=15s"}
 	if name != "" {
 		args = append(args, name)
 	}
@@ -300,6 +314,13 @@ func DefaultPodData(podName, namespace, modelName, testBatch string) PodTemplate
 			Type: "Directory",
 		},
 	}
+	fixtureDataVolume := Volume{
+		Name: "fixture-data",
+		HostPath: &HostPathVolume{
+			Path: "/tmp/e2e-fixture-data",
+			Type: "Directory",
+		},
+	}
 	modelDataMount := VolumeMount{
 		Name:      "model-data",
 		MountPath: "/data",
@@ -310,14 +331,19 @@ func DefaultPodData(podName, namespace, modelName, testBatch string) PodTemplate
 		MountPath: "/keys",
 		ReadOnly:  true,
 	}
+	fixtureDataMount := VolumeMount{
+		Name:      "fixture-data",
+		MountPath: "/fixtures",
+		ReadOnly:  true,
+	}
 
 	data := PodTemplateData{
 		PodName:      podName,
 		Namespace:    namespace,
 		ModelName:    modelName,
 		TestBatch:    testBatch,
-		VolumeMounts: []VolumeMount{modelDataMount, keysDataMount},
-		Volumes:      []Volume{modelDataVolume, keysDataVolume},
+		VolumeMounts: []VolumeMount{modelDataMount, keysDataMount, fixtureDataMount},
+		Volumes:      []Volume{modelDataVolume, keysDataVolume, fixtureDataVolume},
 	}
 
 	return data
@@ -330,9 +356,20 @@ func GetMetricsOutput(namespace, podName string) string {
 		return ""
 	}
 
+	metricsHost := fmt.Sprintf("%s.%s.svc.cluster.local", MetricsServiceName, namespace)
+	holderIdentity, holderErr := KubectlGet("lease", "2b2639c9.sigstore.dev", namespace,
+		"jsonpath={.spec.holderIdentity}")
+	if holderErr == nil && holderIdentity != "" {
+		leaderPod := strings.SplitN(holderIdentity, "_", 2)[0]
+		podIP, podErr := KubectlGet("pod", leaderPod, namespace, "jsonpath={.status.podIP}")
+		if podErr == nil && podIP != "" {
+			metricsHost = podIP
+		}
+	}
+
 	curlCommand := fmt.Sprintf(
-		"curl -s -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics 2>/dev/null",
-		token, MetricsServiceName, namespace)
+		"curl -s -k -H 'Authorization: Bearer %s' https://%s:8443/metrics 2>/dev/null",
+		token, metricsHost)
 	execCmd := exec.Command("kubectl", "exec", podName, "-n", namespace,
 		"--", "/bin/sh", "-c", curlCommand)
 
@@ -371,6 +408,13 @@ func KubectlDescribe(resource, name, namespace string) (string, error) {
 func KubectlResourceExists(resource, name, namespace string) bool {
 	_, err := KubectlGet(resource, name, namespace, "")
 	return err == nil
+}
+
+// KubectlResourceAbsent distinguishes API NotFound from connectivity/authentication errors.
+func KubectlResourceAbsent(resource, name, namespace string) (bool, error) {
+	output, err := Run(exec.Command("kubectl", "get", resource, name, "-n", namespace,
+		"--ignore-not-found=true", "--request-timeout=15s", "-o", "name"))
+	return strings.TrimSpace(output) == "" && err == nil, err
 }
 
 // HasValidationContainer checks if a pod has the model-validation init container

@@ -201,6 +201,10 @@ docker-build: test ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 
+.PHONY: docker-build-coverage
+docker-build-coverage: ## Build a coverage-instrumented manager image for E2E tests.
+	$(CONTAINER_TOOL) build -t ${IMG} --build-arg AGENT_IMG=${AGENT_IMG} -f Dockerfile.coverage .
+
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
@@ -258,7 +262,6 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/overlays/production && $(KUSTOMIZE) edit set image controller=${IMG}
-	cd config/overlays/production && $(KUSTOMIZE) edit set replicas controller-manager=1
 	$(KUSTOMIZE) build config/overlays/production | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
@@ -500,7 +503,7 @@ e2e-sign-test-model: e2e-generate-test-keys
 .PHONY: e2e-build-test-model
 e2e-build-test-model: e2e-sign-test-model
 	@echo "Building test model image..."
-	cd testdata && $(CONTAINER_TOOL) build --no-cache -t $(E2E_TEST_MODEL) -f docker/test-model.Dockerfile .
+	$(CONTAINER_TOOL) build --no-cache -t $(E2E_TEST_MODEL) -f testdata/docker/test-model.Dockerfile .
 
 # install and uninstall cert-manager for tests
 
@@ -597,25 +600,55 @@ e2e-teardown: e2e-cleanup-resources undeploy e2e-uninstall-certmanager
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests, no setup and teardown.  Expects the operator to be deployed.
 	@echo "Running e2e tests (assumes infrastructure is already set up)..."
-	go test ./test/e2e/ -v -ginkgo.v
+	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m
+
+.PHONY: test-e2e-integration
+test-e2e-integration: test-e2e ## Run the integration-tagged E2E partition.
+
+.PHONY: test-e2e-ha
+test-e2e-ha: manifests generate fmt vet ## Run disruptive HA tests against an existing multi-node cluster.
+	go test -tags=ha ./test/e2e/ -v -ginkgo.v -timeout 30m
 
 .PHONY: test-e2e-full
 test-e2e-full: manifests generate fmt vet e2e-setup ## Run e2e tests with setup and teardown
 	@echo "Running e2e tests with full infrastructure setup..."
-	go test ./test/e2e/ -v -ginkgo.v; \
-	TEST_RESULT=$$?; \
-	$(MAKE) e2e-teardown; \
-	exit $$TEST_RESULT
+	@result=0; \
+	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m || result=$$?; \
+	$(MAKE) e2e-teardown || { cleanup_result=$$?; if [ $$result -eq 0 ]; then result=$$cleanup_result; fi; }; \
+	exit $$result
 
 .PHONY: test-e2e-ci
 test-e2e-ci: manifests generate fmt vet e2e-setup ## Run the e2e tests, with setup.  No teardown as the CI workflow will throw away kind
 	@echo "Running e2e tests with infrastructure setup for CI..."
-	go test ./test/e2e/ -v -ginkgo.v
+	@if [ "$${E2E_COLLECT_COVERAGE:-false}" = "true" ]; then $(MAKE) init-e2e-coverage; fi
+	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m
+
+.PHONY: test-e2e-ha-ci
+test-e2e-ha-ci: manifests generate fmt vet e2e-setup ## Set up and run HA tests in CI.
+	go test -tags=ha ./test/e2e/ -v -ginkgo.v -timeout 30m
+
+.PHONY: init-e2e-coverage
+init-e2e-coverage: ## Start a fresh coverage session, retaining old sessions for diagnosis.
+	bash scripts/e2e-coverage.sh init
+
+.PHONY: snapshot-e2e-coverage
+snapshot-e2e-coverage: ## Save cumulative coverage before restarting or terminating managers.
+	KUBECTL="$(KUBECTL)" E2E_OPERATOR_NAMESPACE="$(E2E_OPERATOR_NAMESPACE)" bash scripts/e2e-coverage.sh snapshot
+
+.PHONY: collect-e2e-coverage
+collect-e2e-coverage: ## Snapshot current managers and merge them with all pre-disruption processes.
+	KUBECTL="$(KUBECTL)" E2E_OPERATOR_NAMESPACE="$(E2E_OPERATOR_NAMESPACE)" bash scripts/e2e-coverage.sh collect
+
+.PHONY: test-coverage-collector
+test-coverage-collector: ## Test coverage collection with real Go counter data and mocked Kubernetes.
+	bash scripts/test-e2e-coverage.sh
 
 ##@ OLM E2E Test Infrastructure
 
 # OLM E2E Variables
-OLM_NAMESPACE ?= $(shell $(KUBECTL) get ns openshift-operator-lifecycle-manager --no-headers >/dev/null 2>&1 && echo openshift-operator-lifecycle-manager || echo olm)
+# Catalogs outside the marketplace namespace are local to their Subscription.
+# The OLM controller namespace is unrelated to CatalogSource visibility.
+OLM_CATALOG_NAMESPACE ?= $(E2E_OPERATOR_NAMESPACE)
 OLM_CHANNEL ?= tech-preview
 OLM_PACKAGE ?= model-validation-operator
 
@@ -631,15 +664,21 @@ e2e-uninstall-olm: operator-sdk ## Uninstall OLM from the cluster
 .PHONY: e2e-olm-teardown
 e2e-olm-teardown: ## Tear down OLM e2e test environment
 	@echo "Tearing down OLM e2e test environment..."
-	-$(KUBECTL) delete subscription --all -n $(E2E_OPERATOR_NAMESPACE) --timeout=30s
-	-$(KUBECTL) delete csv --all -n $(E2E_OPERATOR_NAMESPACE) --timeout=60s
-	-$(KUBECTL) delete operatorgroup --all -n $(E2E_OPERATOR_NAMESPACE) --timeout=30s
-	-$(KUBECTL) delete catalogsource model-validation-test-catalog -n $(OLM_NAMESPACE) --timeout=30s --ignore-not-found=true
-	-$(KUBECTL) delete pods --all -n $(E2E_TEST_NAMESPACE) --timeout=30s
-	-$(KUBECTL) delete modelvalidations --all -n $(E2E_TEST_NAMESPACE) --timeout=30s
+	$(KUBECTL) delete pods olm-test-pod-initial olm-test-pod-upgrade -n $(E2E_TEST_NAMESPACE) --ignore-not-found --timeout=30s
+	$(KUBECTL) delete modelvalidation olm-upgrade-test-model -n $(E2E_TEST_NAMESPACE) --ignore-not-found --timeout=30s
+	@csv_names=$$($(KUBECTL) get subscription model-validation-operator -n $(E2E_OPERATOR_NAMESPACE) --ignore-not-found \
+		-o jsonpath='{.status.installedCSV}{" "}{.status.currentCSV}'); \
+	$(KUBECTL) delete subscription model-validation-operator -n $(E2E_OPERATOR_NAMESPACE) --ignore-not-found --timeout=30s; \
+	for csv in $$csv_names; do \
+		$(KUBECTL) delete csv "$$csv" -n $(E2E_OPERATOR_NAMESPACE) --ignore-not-found --timeout=60s; \
+	done
+	$(KUBECTL) delete operatorgroup model-validation-og -n $(E2E_OPERATOR_NAMESPACE) --ignore-not-found --timeout=30s
+	$(KUBECTL) delete catalogsource model-validation-test-catalog -n $(OLM_CATALOG_NAMESPACE) --ignore-not-found --timeout=30s
 
 .PHONY: test-e2e-olm
 test-e2e-olm: manifests generate fmt vet ## Run OLM upgrade e2e tests
 	@echo "Running OLM upgrade e2e tests..."
-	go test ./test/e2e-olm/ -v -ginkgo.v -timeout 20m
+	go test -tags=upgrade ./test/e2e-olm/ -v -ginkgo.v -timeout 20m
 
+.PHONY: test-e2e-upgrade
+test-e2e-upgrade: test-e2e-olm ## Run the upgrade-tagged E2E partition.

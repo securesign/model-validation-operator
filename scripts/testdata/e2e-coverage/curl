@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Assert that each HTTP request is explicitly bounded.
+[[ " $* " == *" --connect-timeout 2 "* && " $* " == *" --max-time 5 "* ]]
+case "${MOCK_MODE:-success}" in
+    http-error) exit 22 ;;
+    malformed) echo 'not json' ;;
+    missing-counters) jq 'del(.counters_data)' "$MOCK_RESPONSE" ;;
+    path-traversal) jq '.meta_filename = "../../outside"' "$MOCK_RESPONSE" ;;
+    bad-base64) jq '.counters_data = "!invalid!"' "$MOCK_RESPONSE" ;;
+    bad-binary) jq '.counters_data = "aW52YWxpZA=="' "$MOCK_RESPONSE" ;;
+    *) cat "$MOCK_RESPONSE" ;;
+esac

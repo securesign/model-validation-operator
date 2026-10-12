@@ -8,4 +8,7 @@ spec:
   name: {{.PackageName}}
   source: {{.CatalogSourceName}}
   sourceNamespace: {{.CatalogSourceNamespace}}
+{{- if .StartingCSV}}
+  startingCSV: {{.StartingCSV}}
+{{- end}}
   installPlanApproval: Automatic

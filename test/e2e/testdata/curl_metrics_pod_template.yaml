@@ -23,7 +23,12 @@ kind: Pod
 metadata:
   name: {{.PodName}}
   namespace: {{.Namespace}}
+  annotations:
+    # OpenShift must not select the elevated hostPath fixture SCC for this Pod.
+    # Kubernetes/Kind treats this annotation as ordinary metadata.
+    openshift.io/required-scc: restricted-v2
 spec:
+  terminationGracePeriodSeconds: 1
   containers:
   - name: curl
     image: curlimages/curl:latest
@@ -34,7 +39,6 @@ spec:
       capabilities:
         drop: ["ALL"]
       runAsNonRoot: true
-      runAsUser: 1000
       seccompProfile:
         type: RuntimeDefault
   serviceAccount: {{.ServiceAccount}}
