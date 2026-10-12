@@ -11,11 +11,15 @@ env:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   test-e2e:
     name: Run E2E Tests
     runs-on: ubuntu-latest
+    env:
+      CONTAINER_FILE: Dockerfile.coverage
+      E2E_COLLECT_COVERAGE: "true"
     steps:
       - name: Checkout code
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
@@ -43,6 +47,91 @@ jobs:
       - name: Run E2E tests
         run: |
           make test-e2e-ci
+
+      - name: Collect E2E coverage
+        if: ${{ !cancelled() }}
+        run: make collect-e2e-coverage
+
+      - name: Upload E2E coverage to Codecov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        with:
+          files: e2e-cover.out
+          flags: e2e
+          use_oidc: true
+          fail_ci_if_error: true
+
+      - name: Collect cluster diagnostics
+        if: ${{ failure() }}
+        run: |
+          mkdir -p e2e-diagnostics
+          kubectl get pods,events,deployments,endpointslices -n model-validation-operator-system -o yaml > e2e-diagnostics/operator.yaml || true
+          kubectl get pods,events,modelvalidations -n e2e-webhook-test-ns -o yaml > e2e-diagnostics/tests.yaml || true
+          kubectl logs -n model-validation-operator-system -l control-plane=controller-manager --all-containers --prefix --tail=1000 > e2e-diagnostics/operator.log || true
+
+      - name: Upload E2E diagnostics and coverage snapshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: integration-evidence
+          path: |
+            e2e-diagnostics/
+            e2e-coverdata/
+            e2e-cover.out
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+
+  test-e2e-ha:
+    name: Run HA E2E Tests
+    runs-on: ubuntu-latest
+    env:
+      E2E_ALLOW_NODE_DRAIN: "true"
+      E2E_DRAIN_NODE_SELECTOR: mvo-e2e-drain=true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+
+      - name: Setup Go
+        uses: actions/setup-go@def8c394e3ad351a79bc93815e4a585520fe993b # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Create multi-node kind cluster
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
+        with:
+          cluster_name: kind
+          config: ./ci/kind-ha-config.yaml
+
+      - name: Wait for kind cluster to be ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          kubectl wait --for=condition=Ready --namespace=kube-system pod --all --timeout=300s
+          kubectl label nodes -l '!node-role.kubernetes.io/control-plane' mvo-e2e-drain=true
+
+      - name: Swap to dev images
+        run: make dev-images
+
+      - name: Run HA E2E tests
+        run: make test-e2e-ha-ci
+
+      - name: Collect HA diagnostics
+        if: ${{ failure() }}
+        run: |
+          mkdir -p e2e-diagnostics
+          kubectl get nodes -o yaml > e2e-diagnostics/nodes.yaml || true
+          kubectl get pods,events,deployments,poddisruptionbudgets,leases -n model-validation-operator-system -o yaml > e2e-diagnostics/operator.yaml || true
+          kubectl get pods,events,modelvalidations -n e2e-webhook-test-ns -o yaml > e2e-diagnostics/tests.yaml || true
+          kubectl logs -n model-validation-operator-system -l control-plane=controller-manager --all-containers --prefix --tail=1000 > e2e-diagnostics/operator.log || true
+
+      - name: Upload HA diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ha-evidence
+          path: e2e-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
 
   test-e2e-olm-upgrade:
     name: Test OLM upgrade
@@ -176,5 +265,8 @@ jobs:
         env:
           TEST_BASE_CATALOG: registry.redhat.io/redhat/redhat-operator-index:${{ vars.OLM_INDEX_VERSION }}
           TEST_TARGET_CATALOG: ${{ env.CATALOG_IMG }}
+          # CI creates a next-patch upgrade candidate, not an approved GA release.
+          TEST_EXPECTED_TARGET_CSV: model-validation-operator.v${{ env.OLM_UPGRADE_VERSION }}
+          TEST_EXPECTED_TARGET_IMAGE: ${{ env.IMG }}
         run: |
-          go test ./test/e2e-olm/ -v -ginkgo.v -timeout 20m
+          go test -tags=upgrade ./test/e2e-olm/ -v -ginkgo.v -timeout 20m

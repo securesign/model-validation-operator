@@ -1,3 +1,5 @@
+//go:build integration || ha
+
 /*
 Copyright 2025.
 
@@ -18,6 +20,8 @@ package e2e
 
 import _ "embed"
 
+const curlMetricsPodName = "curl-metrics"
+
 // ModelValidation CR template used by multiple tests
 //
 //go:embed testdata/modelvalidation_template.yaml
@@ -30,6 +34,3 @@ var podTemplate []byte
 
 //go:embed testdata/curl_metrics_pod_template.yaml
 var curlPodTemplate []byte
-
-//go:embed testdata/clusterrolebinding_template.yaml
-var clusterRoleBindingTemplate []byte

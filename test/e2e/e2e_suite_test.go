@@ -1,3 +1,5 @@
+//go:build integration || ha
+
 // Copyright 2025 The Sigstore Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +18,8 @@
 package e2e
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -99,31 +103,35 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	By("cleaning up test resources")
-
-	// Clean up any test resources that may have been created during tests
-	By("cleaning up test pods and CRs")
-	cmd := exec.Command("kubectl", "delete", "pods", "--all", "-n", webhookTestNamespace,
-		"--timeout=30s", "--ignore-not-found=true")
-	_, _ = utils.Run(cmd)
-
-	cmd = exec.Command("kubectl", "delete", "modelvalidations", "--all", "-n", webhookTestNamespace,
-		"--timeout=30s", "--ignore-not-found=true")
-	_, _ = utils.Run(cmd)
-
-	By("cleaning up persistent metrics pod")
-	cleanupTemplateData := utils.CurlPodTemplateData{
-		PodName:        curlMetricsPodName,
-		Namespace:      operatorNamespace,
-		ServiceAccount: utils.MetricsServiceAccountName,
+	// The workload namespace is dedicated to this suite, but fixture DaemonSet
+	// Pods are reusable infrastructure, not test workloads. Metrics resources are
+	// individually named because the operator namespace also hosts the manager.
+	// Attempt every step before failing, so one stuck finalizer does not prevent
+	// cleanup of unrelated test objects. Bound both API requests and each process.
+	steps := []struct {
+		name string
+		args []string
+	}{
+		{name: "test pods", args: []string{"pods", "--selector=app!=model-data-setup", "-n", webhookTestNamespace}},
+		{name: "test CRs", args: []string{"modelvalidations", "--all", "-n", webhookTestNamespace}},
+		{name: "metrics pod", args: []string{"pod", curlMetricsPodName, "-n", operatorNamespace}},
+		{name: "metrics service account", args: []string{"serviceaccount", utils.MetricsServiceAccountName,
+			"-n", operatorNamespace}},
+		{name: "metrics role binding", args: []string{"clusterrolebinding", utils.MetricsServiceAccountName + "-binding"}},
 	}
-	if err := utils.KubectlDelete(curlPodTemplate, &utils.KubectlDeleteOptions{
-		IgnoreNotFound: true,
-		Timeout:        "30s",
-		TemplateData:   cleanupTemplateData,
-	}); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Failed to cleanup metrics pod: %s\n", err)
+	var cleanupErrors []error
+	for _, step := range steps {
+		By("cleaning up " + step.name)
+		args := append([]string{"delete"}, step.args...)
+		args = append(args, "--timeout=30s", "--request-timeout=15s", "--ignore-not-found=true")
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		_, err := utils.Run(exec.CommandContext(ctx, "kubectl", args...))
+		cancel()
+		if err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("%s: %w", step.name, err))
+		}
 	}
-
+	Expect(errors.Join(cleanupErrors...)).To(Succeed(), "suite cleanup failed after attempting every cleanup step")
 	_, _ = fmt.Fprintf(GinkgoWriter, "Test cleanup complete.\n")
 })
 

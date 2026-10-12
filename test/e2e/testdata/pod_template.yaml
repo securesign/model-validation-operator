@@ -8,6 +8,7 @@ metadata:
     test-batch: "{{.TestBatch}}"{{end}}
 spec:
   restartPolicy: Never
+  terminationGracePeriodSeconds: 1
   containers:
   - name: test-container
     image: busybox:latest

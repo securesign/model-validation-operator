@@ -1,0 +1,10 @@
+# Match OLM v1's fail-closed CRD upgrade safety checks.
+conversion: Ignore
+unhandledEnforcement: Error
+validations:
+  - name: description
+    enforcement: Warn
+  - name: enum
+    enforcement: Error
+    configuration:
+      additionPolicy: Allow
