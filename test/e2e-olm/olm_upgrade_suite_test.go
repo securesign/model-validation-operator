@@ -1,3 +1,5 @@
+//go:build upgrade
+
 // Copyright 2025 The Sigstore Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +18,7 @@ package e2eolm
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -23,20 +26,26 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive
 
 	utils "github.com/sigstore/model-validation-operator/test/utils"
+	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
-const (
-	operatorNamespace    = "model-validation-operator-system"
-	webhookTestNamespace = "e2e-webhook-test-ns"
+var (
+	olmNamespace    string
+	upgradeSettings upgradeConfig
 )
 
-var olmNamespace string
-
-func detectOLMNamespace() string {
-	if utils.KubectlResourceExists("ns", "openshift-operator-lifecycle-manager", "") {
-		return "openshift-operator-lifecycle-manager"
+func detectOLMNamespace() (string, error) {
+	for _, namespace := range []string{"openshift-operator-lifecycle-manager", "olm"} {
+		output, err := getResourceIfPresent("namespace", namespace, "")
+		if err != nil {
+			return "", err
+		}
+		if output != "" {
+			return namespace, nil
+		}
 	}
-	return "olm"
+	return "hosted/external (no local controller namespace)", nil
 }
 
 func TestOLMUpgrade(t *testing.T) {
@@ -50,44 +59,49 @@ func TestOLMUpgrade(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	var err error
+	upgradeSettings, err = readUpgradeConfig(os.Getenv)
+	Expect(err).NotTo(HaveOccurred())
+
 	By("detecting OLM namespace")
-	olmNamespace = detectOLMNamespace()
-	_, _ = fmt.Fprintf(GinkgoWriter, "Using OLM namespace: %s\n", olmNamespace)
+	olmNamespace = upgradeSettings.controllerNamespace
+	if olmNamespace == "" {
+		olmNamespace, err = detectOLMNamespace()
+		Expect(err).NotTo(HaveOccurred())
+	}
+	_, _ = fmt.Fprintf(GinkgoWriter, "OLM controller location (diagnostic only): %s; catalog namespace: %s\n",
+		olmNamespace, upgradeSettings.catalogNamespace)
 
-	By("verifying OLM is installed")
-	Expect(utils.KubectlResourceExists("ns", olmNamespace, "")).To(BeTrue(),
-		"OLM namespace should exist - run 'make e2e-install-olm' first")
-
-	By("verifying OLM operators are running")
-	Eventually(func() error {
-		output, err := utils.KubectlGet("pods", "", olmNamespace,
-			"jsonpath={range .items[*]}{.status.phase}{\"\\n\"}{end}")
-		if err != nil {
-			return err
-		}
-		phases := utils.GetNonEmptyLines(output)
-		if len(phases) == 0 {
-			return fmt.Errorf("no OLM pods found in %s namespace", olmNamespace)
-		}
-		for _, phase := range phases {
-			if phase != "Running" && phase != "Succeeded" {
-				return fmt.Errorf("OLM pod not ready, phase: %s", phase)
+	By("verifying established OLM APIs are available")
+	// ROSA hosted control planes do not expose OLM controller Pods in the
+	// workload cluster. Do not confuse missing local Pods with missing OLM.
+	// Actual controller readiness is proved by catalog resolution and CSV
+	// installation below, not merely by the presence of these APIs.
+	for _, name := range []string{
+		"catalogsources.operators.coreos.com", "subscriptions.operators.coreos.com",
+		"clusterserviceversions.operators.coreos.com", "installplans.operators.coreos.com",
+	} {
+		var crd apiextensionsv1.CustomResourceDefinition
+		Expect(utils.KubectlGetJSON("crd", name, "", &crd)).To(Succeed(), "OLM API %s must be installed", name)
+		established := false
+		for _, condition := range crd.Status.Conditions {
+			if condition.Type == apiextensionsv1.Established && condition.Status == apiextensionsv1.ConditionTrue {
+				established = true
 			}
 		}
-		return nil
-	}, 2*time.Minute, 5*time.Second).Should(Succeed(), "OLM operators should be running")
+		Expect(established).To(BeTrue(), "OLM API %s must be established", name)
+	}
 
-	By("verifying operator namespace exists")
-	Expect(utils.KubectlResourceExists("ns", operatorNamespace, "")).To(BeTrue(),
-		"Operator namespace should exist - run 'make e2e-setup-namespaces' first")
-
-	By("verifying test namespace exists")
-	Expect(utils.KubectlResourceExists("ns", webhookTestNamespace, "")).To(BeTrue(),
-		"Test namespace should exist - run 'make e2e-setup-namespaces' first")
+	By("verifying operator, test and catalog namespaces exist")
+	for _, namespace := range []string{operatorNamespace, webhookTestNamespace, upgradeSettings.catalogNamespace} {
+		var ns corev1.Namespace
+		Expect(utils.KubectlGetJSON("namespace", namespace, "", &ns)).To(Succeed(),
+			"Namespace %s must exist before running the suite", namespace)
+	}
 })
 
 var _ = AfterSuite(func() {
-	_, _ = fmt.Fprintf(GinkgoWriter, "OLM upgrade test suite cleanup complete\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "OLM upgrade suite finished; see the spec and cleanup results above\n")
 })
 
 var _ = JustAfterEach(func() {
