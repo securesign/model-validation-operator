@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -147,6 +148,12 @@ spec:
 			}, 90*time.Second, time.Second).Should(Succeed(),
 				"the restored webhook must accept and mutate real admission requests")
 		})
+
+		if os.Getenv("E2E_COLLECT_COVERAGE") == "true" {
+			By("preserving every live manager's coverage before terminating its process")
+			_, snapshotErr := utils.Run(exec.Command("make", "snapshot-e2e-coverage"))
+			Expect(snapshotErr).NotTo(HaveOccurred(), "coverage-enabled runs must retain pre-disruption counters")
+		}
 
 		_, err = utils.Run(exec.Command("kubectl", "scale", "deployment", deploymentName,
 			"-n", operatorNamespace, "--replicas=0"))
