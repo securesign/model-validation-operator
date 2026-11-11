@@ -201,6 +201,10 @@ docker-build: test ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 
+.PHONY: docker-build-coverage
+docker-build-coverage: ## Build a coverage-instrumented manager image for E2E tests.
+	$(CONTAINER_TOOL) build -t ${IMG} --build-arg AGENT_IMG=${AGENT_IMG} -f Dockerfile.coverage .
+
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
@@ -618,11 +622,28 @@ test-e2e-full: manifests generate fmt vet e2e-setup ## Run e2e tests with setup 
 .PHONY: test-e2e-ci
 test-e2e-ci: manifests generate fmt vet e2e-setup ## Run the e2e tests, with setup.  No teardown as the CI workflow will throw away kind
 	@echo "Running e2e tests with infrastructure setup for CI..."
+	@if [ "$${E2E_COLLECT_COVERAGE:-false}" = "true" ]; then $(MAKE) init-e2e-coverage; fi
 	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m
 
 .PHONY: test-e2e-ha-ci
 test-e2e-ha-ci: manifests generate fmt vet e2e-setup ## Set up and run HA tests in CI.
 	go test -tags=ha ./test/e2e/ -v -ginkgo.v -timeout 30m
+
+.PHONY: init-e2e-coverage
+init-e2e-coverage: ## Start a fresh coverage session, retaining old sessions for diagnosis.
+	bash scripts/e2e-coverage.sh init
+
+.PHONY: snapshot-e2e-coverage
+snapshot-e2e-coverage: ## Save cumulative coverage before restarting or terminating managers.
+	KUBECTL="$(KUBECTL)" E2E_OPERATOR_NAMESPACE="$(E2E_OPERATOR_NAMESPACE)" bash scripts/e2e-coverage.sh snapshot
+
+.PHONY: collect-e2e-coverage
+collect-e2e-coverage: ## Snapshot current managers and merge them with all pre-disruption processes.
+	KUBECTL="$(KUBECTL)" E2E_OPERATOR_NAMESPACE="$(E2E_OPERATOR_NAMESPACE)" bash scripts/e2e-coverage.sh collect
+
+.PHONY: test-coverage-collector
+test-coverage-collector: ## Test coverage collection with real Go counter data and mocked Kubernetes.
+	bash scripts/test-e2e-coverage.sh
 
 ##@ OLM E2E Test Infrastructure
 

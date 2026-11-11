@@ -3,6 +3,8 @@
 /bin
 
 cover.out
+e2e-cover.out
+e2e-coverdata/
 # editor and IDE paraphernalia
 .idea
 .vscode

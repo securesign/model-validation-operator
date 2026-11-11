@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tags: ["", "integration", "ha", "upgrade"]
+        tags: ["", "integration", "ha", "upgrade", "coverage"]
 
     steps:
       - name: Checkout code
@@ -47,6 +47,10 @@ jobs:
       - name: Test metrics Pod security template without a cluster
         if: matrix.tags == 'integration'
         run: go test -race -count=1 -tags=integration ./test/e2e/ -run '^TestMetricsPodSecurityTemplate$'
+
+      - name: Test coverage collector failure handling and process restart retention
+        if: matrix.tags == ''
+        run: make test-coverage-collector
 
   crd-compatibility:
     name: CRD generation and backward compatibility
