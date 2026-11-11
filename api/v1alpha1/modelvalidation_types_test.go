@@ -9,6 +9,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	testNamespace     = "default"
+	testModelPath     = "/path/to/model.onnx"
+	testSignaturePath = "/path/to/model.onnx.sig"
+)
+
 var _ = Describe("ModelValidation", func() {
 
 	// A helper function to generate a valid ModelValidation object for Sigstore.
@@ -16,12 +22,12 @@ var _ = Describe("ModelValidation", func() {
 		return &ModelValidation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: ModelValidationSpec{
 				Model: Model{
-					Path:          "/path/to/model.onnx",
-					SignaturePath: "/path/to/model.onnx.sig",
+					Path:          testModelPath,
+					SignaturePath: testSignaturePath,
 				},
 				Config: ValidationConfig{
 					SigstoreConfig: &SigstoreConfig{
@@ -38,12 +44,12 @@ var _ = Describe("ModelValidation", func() {
 		return &ModelValidation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: ModelValidationSpec{
 				Model: Model{
-					Path:          "/path/to/model.onnx",
-					SignaturePath: "/path/to/model.onnx.sig",
+					Path:          testModelPath,
+					SignaturePath: testSignaturePath,
 				},
 				Config: ValidationConfig{
 					PkiConfig: &PkiConfig{
@@ -59,12 +65,12 @@ var _ = Describe("ModelValidation", func() {
 		return &ModelValidation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: ModelValidationSpec{
 				Model: Model{
-					Path:          "/path/to/model.onnx",
-					SignaturePath: "/path/to/model.onnx.sig",
+					Path:          testModelPath,
+					SignaturePath: testSignaturePath,
 				},
 				Config: ValidationConfig{
 					PublicKeyConfig: &PublicKeyConfig{

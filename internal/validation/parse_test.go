@@ -7,64 +7,82 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	verifyVerb           = "verify"
+	testPublicKeyPath    = "/path/to/key.pub"
+	testSignaturePath    = "/path/to/sig"
+	testIdentity         = "test@example.com"
+	testIdentityProvider = "https://accounts.google.com"
+	certificateMethod    = "certificate"
+	sigstoreMethod       = "sigstore"
+	keyMethod            = "key"
+	testSignatureArg     = "--signature=/path/to/sig"
+	minimalSignatureArg  = "--signature=/sig"
+	identityFlag         = "--identity"
+	identityProviderFlag = "--identity_provider"
+	testModelPath        = "/path/to/model"
+	publicKeyFlag        = "--public_key"
+	ignorePathsFlag      = "--ignore-paths"
+)
+
 func TestParseArgs_Sigstore(t *testing.T) {
 	args := []string{
-		"verify", "sigstore",
-		"--signature=/path/to/sig",
-		"--identity", "test@example.com",
-		"--identity_provider", "https://accounts.google.com",
-		"/path/to/model",
+		verifyVerb, sigstoreMethod,
+		testSignatureArg,
+		identityFlag, testIdentity,
+		identityProviderFlag, testIdentityProvider,
+		testModelPath,
 	}
 
 	cfg, err := ParseArgs(args)
 	require.NoError(t, err)
-	assert.Equal(t, "sigstore", cfg.Method)
-	assert.Equal(t, "/path/to/model", cfg.ModelPath)
-	assert.Equal(t, "/path/to/sig", cfg.SignaturePath)
-	assert.Equal(t, "test@example.com", cfg.Identity)
-	assert.Equal(t, "https://accounts.google.com", cfg.IdentityProvider)
+	assert.Equal(t, sigstoreMethod, cfg.Method)
+	assert.Equal(t, testModelPath, cfg.ModelPath)
+	assert.Equal(t, testSignaturePath, cfg.SignaturePath)
+	assert.Equal(t, testIdentity, cfg.Identity)
+	assert.Equal(t, testIdentityProvider, cfg.IdentityProvider)
 }
 
 func TestParseArgs_Key(t *testing.T) {
 	args := []string{
-		"verify", "key",
-		"--signature=/path/to/sig",
-		"--public_key", "/path/to/key.pub",
-		"/path/to/model",
+		verifyVerb, keyMethod,
+		testSignatureArg,
+		publicKeyFlag, testPublicKeyPath,
+		testModelPath,
 	}
 
 	cfg, err := ParseArgs(args)
 	require.NoError(t, err)
-	assert.Equal(t, "key", cfg.Method)
-	assert.Equal(t, "/path/to/model", cfg.ModelPath)
-	assert.Equal(t, "/path/to/sig", cfg.SignaturePath)
-	assert.Equal(t, "/path/to/key.pub", cfg.PublicKeyPath)
+	assert.Equal(t, keyMethod, cfg.Method)
+	assert.Equal(t, testModelPath, cfg.ModelPath)
+	assert.Equal(t, testSignaturePath, cfg.SignaturePath)
+	assert.Equal(t, testPublicKeyPath, cfg.PublicKeyPath)
 }
 
 func TestParseArgs_Certificate(t *testing.T) {
 	args := []string{
-		"verify", "certificate",
-		"--signature=/path/to/sig",
+		verifyVerb, certificateMethod,
+		testSignatureArg,
 		"--certificate_chain", "/path/to/ca.pem",
-		"/path/to/model",
+		testModelPath,
 	}
 
 	cfg, err := ParseArgs(args)
 	require.NoError(t, err)
-	assert.Equal(t, "certificate", cfg.Method)
-	assert.Equal(t, "/path/to/model", cfg.ModelPath)
-	assert.Equal(t, "/path/to/sig", cfg.SignaturePath)
+	assert.Equal(t, certificateMethod, cfg.Method)
+	assert.Equal(t, testModelPath, cfg.ModelPath)
+	assert.Equal(t, testSignaturePath, cfg.SignaturePath)
 	assert.Equal(t, "/path/to/ca.pem", cfg.CertificateChainPath)
 }
 
 func TestParseArgs_WithTrustConfig(t *testing.T) {
 	args := []string{
-		"verify", "sigstore",
-		"--signature=/path/to/sig",
-		"--identity", "test@example.com",
-		"--identity_provider", "https://accounts.google.com",
+		verifyVerb, sigstoreMethod,
+		testSignatureArg,
+		identityFlag, testIdentity,
+		identityProviderFlag, testIdentityProvider,
 		"--trust_config", "/path/to/trust.json",
-		"/path/to/model",
+		testModelPath,
 	}
 
 	cfg, err := ParseArgs(args)
@@ -74,12 +92,12 @@ func TestParseArgs_WithTrustConfig(t *testing.T) {
 
 func TestParseArgs_WithIgnorePaths(t *testing.T) {
 	args := []string{
-		"verify", "key",
-		"--signature=/path/to/sig",
-		"--public_key", "/path/to/key.pub",
-		"--ignore-paths", "/tmp",
-		"--ignore-paths", "/cache",
-		"/path/to/model",
+		verifyVerb, keyMethod,
+		testSignatureArg,
+		publicKeyFlag, testPublicKeyPath,
+		ignorePathsFlag, "/tmp",
+		ignorePathsFlag, "/cache",
+		testModelPath,
 	}
 
 	cfg, err := ParseArgs(args)
@@ -89,13 +107,13 @@ func TestParseArgs_WithIgnorePaths(t *testing.T) {
 
 func TestParseArgs_WithBooleanFlags(t *testing.T) {
 	args := []string{
-		"verify", "key",
-		"--signature=/path/to/sig",
-		"--public_key", "/path/to/key.pub",
+		verifyVerb, keyMethod,
+		testSignatureArg,
+		publicKeyFlag, testPublicKeyPath,
 		"--ignore-git-paths",
 		"--no-ignore_unsigned_files",
 		"--allow_symlinks",
-		"/path/to/model",
+		testModelPath,
 	}
 
 	cfg, err := ParseArgs(args)
@@ -110,12 +128,12 @@ func TestParseArgs_WithBooleanFlags(t *testing.T) {
 
 func TestParseArgs_NegatedBooleanFlags(t *testing.T) {
 	args := []string{
-		"verify", "key",
-		"--signature=/path/to/sig",
-		"--public_key", "/path/to/key.pub",
+		verifyVerb, keyMethod,
+		testSignatureArg,
+		publicKeyFlag, testPublicKeyPath,
 		"--no-ignore-git-paths",
 		"--ignore_unsigned_files",
-		"/path/to/model",
+		testModelPath,
 	}
 
 	cfg, err := ParseArgs(args)
@@ -129,10 +147,10 @@ func TestParseArgs_NegatedBooleanFlags(t *testing.T) {
 
 func TestParseArgs_NilBooleans(t *testing.T) {
 	args := []string{
-		"verify", "key",
-		"--signature=/path/to/sig",
-		"--public_key", "/path/to/key.pub",
-		"/path/to/model",
+		verifyVerb, keyMethod,
+		testSignatureArg,
+		publicKeyFlag, testPublicKeyPath,
+		testModelPath,
 	}
 
 	cfg, err := ParseArgs(args)
@@ -143,28 +161,28 @@ func TestParseArgs_NilBooleans(t *testing.T) {
 }
 
 func TestParseArgs_TooFewArgs(t *testing.T) {
-	_, err := ParseArgs([]string{"verify", "sigstore"})
+	_, err := ParseArgs([]string{verifyVerb, sigstoreMethod})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "expected at least 3 arguments")
 }
 
 func TestParseArgs_InvalidVerb(t *testing.T) {
-	_, err := ParseArgs([]string{"sign", "sigstore", "/model"})
+	_, err := ParseArgs([]string{"sign", sigstoreMethod, "/model"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "expected first argument to be 'verify'")
 }
 
 func TestParseArgs_InvalidMethod(t *testing.T) {
-	_, err := ParseArgs([]string{"verify", "unknown", "/model"})
+	_, err := ParseArgs([]string{verifyVerb, "unknown", "/model"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown verification method")
 }
 
 func TestParseArgs_MissingModelPath(t *testing.T) {
 	args := []string{
-		"verify", "key",
-		"--signature=/path/to/sig",
-		"--public_key", "/path/to/key.pub",
+		verifyVerb, keyMethod,
+		testSignatureArg,
+		publicKeyFlag, testPublicKeyPath,
 	}
 	_, err := ParseArgs(args)
 	assert.Error(t, err)
@@ -178,27 +196,27 @@ func TestParseArgs_MissingFlagValue(t *testing.T) {
 	}{
 		{
 			name: "missing identity value",
-			args: []string{"verify", "sigstore", "--signature=/sig", "--identity"},
+			args: []string{verifyVerb, sigstoreMethod, minimalSignatureArg, identityFlag},
 		},
 		{
 			name: "missing identity_provider value",
-			args: []string{"verify", "sigstore", "--signature=/sig", "--identity_provider"},
+			args: []string{verifyVerb, sigstoreMethod, minimalSignatureArg, identityProviderFlag},
 		},
 		{
 			name: "missing public_key value",
-			args: []string{"verify", "key", "--signature=/sig", "--public_key"},
+			args: []string{verifyVerb, keyMethod, minimalSignatureArg, publicKeyFlag},
 		},
 		{
 			name: "missing certificate_chain value",
-			args: []string{"verify", "certificate", "--signature=/sig", "--certificate_chain"},
+			args: []string{verifyVerb, certificateMethod, minimalSignatureArg, "--certificate_chain"},
 		},
 		{
 			name: "missing trust_config value",
-			args: []string{"verify", "sigstore", "--signature=/sig", "--trust_config"},
+			args: []string{verifyVerb, sigstoreMethod, minimalSignatureArg, "--trust_config"},
 		},
 		{
 			name: "missing ignore-paths value",
-			args: []string{"verify", "key", "--signature=/sig", "--ignore-paths"},
+			args: []string{verifyVerb, keyMethod, minimalSignatureArg, ignorePathsFlag},
 		},
 	}
 

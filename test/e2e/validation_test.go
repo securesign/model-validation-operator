@@ -1,3 +1,5 @@
+//go:build integration
+
 /*
 Copyright 2025.
 
@@ -97,7 +99,9 @@ var _ = Describe("ModelValidation Success/Failure Scenarios", Ordered, func() {
 			podToDelete := fmt.Sprintf(
 				"apiVersion: v1\nkind: Pod\nmetadata:\n  name: %s\n  namespace: %s",
 				podName, validationTestNamespace)
-			_ = utils.KubectlDelete([]byte(podToDelete), &utils.KubectlDeleteOptions{Timeout: "30s", IgnoreNotFound: true})
+			_ = utils.KubectlDelete([]byte(podToDelete), &utils.KubectlDeleteOptions{
+				Timeout: resourceWaitTimeout, IgnoreNotFound: true,
+			})
 		})
 
 		It("should successfully validate with public key signature", func() {
@@ -153,11 +157,15 @@ var _ = Describe("ModelValidation Success/Failure Scenarios", Ordered, func() {
 			podToDelete := fmt.Sprintf(
 				"apiVersion: v1\nkind: Pod\nmetadata:\n  name: %s\n  namespace: %s",
 				podName, validationTestNamespace)
-			_ = utils.KubectlDelete([]byte(podToDelete), &utils.KubectlDeleteOptions{Timeout: "30s", IgnoreNotFound: true})
+			_ = utils.KubectlDelete([]byte(podToDelete), &utils.KubectlDeleteOptions{
+				Timeout: resourceWaitTimeout, IgnoreNotFound: true,
+			})
 			crToDelete := fmt.Sprintf(
 				"apiVersion: ml.sigstore.dev/v1alpha1\nkind: ModelValidation\nmetadata:\n  name: %s\n  namespace: %s",
 				modelName, validationTestNamespace)
-			_ = utils.KubectlDelete([]byte(crToDelete), &utils.KubectlDeleteOptions{Timeout: "30s", IgnoreNotFound: true})
+			_ = utils.KubectlDelete([]byte(crToDelete), &utils.KubectlDeleteOptions{
+				Timeout: resourceWaitTimeout, IgnoreNotFound: true,
+			})
 		})
 	})
 })

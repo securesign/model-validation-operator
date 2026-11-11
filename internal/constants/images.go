@@ -25,7 +25,6 @@ var (
 	// It contains the validation-agent binary which natively validates models
 	// using the model-transparency-go library. Used for both one-shot and
 	// continuous validation modes.
-	// This can be overridden at build time via ldflags:
-	//   go build -ldflags="-X github.com/sigstore/model-validation-operator/internal/constants.ModelValidationAgentImage=myimage:tag"
+	// This can be overridden at build time via the LDFLAGS defined in the Makefile.
 	ModelValidationAgentImage = "ghcr.io/sigstore/model-validation-agent:v0.1.0"
 )
