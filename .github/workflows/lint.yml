@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tags: ["", "integration", "upgrade"]
+        tags: ["", "integration", "ha", "upgrade"]
 
     steps:
       - name: Checkout code

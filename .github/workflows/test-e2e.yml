@@ -44,6 +44,58 @@ jobs:
         run: |
           make test-e2e-ci
 
+  test-e2e-ha:
+    name: Run HA E2E Tests
+    runs-on: ubuntu-latest
+    env:
+      E2E_ALLOW_NODE_DRAIN: "true"
+      E2E_DRAIN_NODE_SELECTOR: mvo-e2e-drain=true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+
+      - name: Setup Go
+        uses: actions/setup-go@def8c394e3ad351a79bc93815e4a585520fe993b # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Create multi-node kind cluster
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
+        with:
+          cluster_name: kind
+          config: ./ci/kind-ha-config.yaml
+
+      - name: Wait for kind cluster to be ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          kubectl wait --for=condition=Ready --namespace=kube-system pod --all --timeout=300s
+          kubectl label nodes -l '!node-role.kubernetes.io/control-plane' mvo-e2e-drain=true
+
+      - name: Swap to dev images
+        run: make dev-images
+
+      - name: Run HA E2E tests
+        run: make test-e2e-ha-ci
+
+      - name: Collect HA diagnostics
+        if: ${{ failure() }}
+        run: |
+          mkdir -p e2e-diagnostics
+          kubectl get nodes -o yaml > e2e-diagnostics/nodes.yaml || true
+          kubectl get pods,events,deployments,poddisruptionbudgets,leases -n model-validation-operator-system -o yaml > e2e-diagnostics/operator.yaml || true
+          kubectl get pods,events,modelvalidations -n e2e-webhook-test-ns -o yaml > e2e-diagnostics/tests.yaml || true
+          kubectl logs -n model-validation-operator-system -l control-plane=controller-manager --all-containers --prefix --tail=1000 > e2e-diagnostics/operator.log || true
+
+      - name: Upload HA diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ha-evidence
+          path: e2e-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
+
   test-e2e-olm-upgrade:
     name: Test OLM upgrade
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
