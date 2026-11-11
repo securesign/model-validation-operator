@@ -500,7 +500,7 @@ e2e-sign-test-model: e2e-generate-test-keys
 .PHONY: e2e-build-test-model
 e2e-build-test-model: e2e-sign-test-model
 	@echo "Building test model image..."
-	cd testdata && $(CONTAINER_TOOL) build --no-cache -t $(E2E_TEST_MODEL) -f docker/test-model.Dockerfile .
+	$(CONTAINER_TOOL) build --no-cache -t $(E2E_TEST_MODEL) -f testdata/docker/test-model.Dockerfile .
 
 # install and uninstall cert-manager for tests
 

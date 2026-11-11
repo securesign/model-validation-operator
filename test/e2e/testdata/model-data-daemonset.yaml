@@ -22,15 +22,26 @@ spec:
         - sh
         - -c
         - |
+          set -eu
           echo "Setting up model data on node $NODE_NAME..."
-          mkdir -p /host-data /host-keys
+          mkdir -p /host-data /host-keys /host-fixtures
+          # Go module fixtures can be read-only. A restarted root container
+          # without DAC_OVERRIDE must restore owner write access before copying.
+          chmod -R u+rwX /host-data /host-keys /host-fixtures
           cp -r /data/* /host-data/
           cp -r /keys/* /host-keys/
+          cp -r /fixtures/* /host-fixtures/
           # Make files readable by all users (validation-agent runs as UID 65532)
-          chmod -R a+rX /host-data /host-keys
+          chmod -R a+rX /host-data /host-keys /host-fixtures
           echo "Model data setup complete on node $NODE_NAME"
+          touch /tmp/model-data-ready
           # Keep running so DaemonSet stays active
           sleep infinity
+        readinessProbe:
+          exec:
+            command: ["test", "-f", "/tmp/model-data-ready"]
+          initialDelaySeconds: 1
+          periodSeconds: 2
         env:
         - name: NODE_NAME
           valueFrom:
@@ -41,6 +52,8 @@ spec:
           mountPath: /host-data
         - name: host-keys-data
           mountPath: /host-keys
+        - name: host-fixture-data
+          mountPath: /host-fixtures
         securityContext:
           runAsNonRoot: false
           runAsUser: 0
@@ -52,6 +65,10 @@ spec:
       - name: host-keys-data
         hostPath:
           path: /tmp/e2e-keys-data
+          type: DirectoryOrCreate
+      - name: host-fixture-data
+        hostPath:
+          path: /tmp/e2e-fixture-data
           type: DirectoryOrCreate
       tolerations:
       - operator: Exists

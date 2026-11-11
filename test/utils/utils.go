@@ -305,14 +305,21 @@ func DefaultPodData(podName, namespace, modelName, testBatch string) PodTemplate
 		Name: "model-data",
 		HostPath: &HostPathVolume{
 			Path: "/tmp/e2e-model-data",
-			Type: "Directory",
+			Type: string(corev1.HostPathDirectory),
 		},
 	}
 	keysDataVolume := Volume{
 		Name: "keys-data",
 		HostPath: &HostPathVolume{
 			Path: "/tmp/e2e-keys-data",
-			Type: "Directory",
+			Type: string(corev1.HostPathDirectory),
+		},
+	}
+	fixtureDataVolume := Volume{
+		Name: "fixture-data",
+		HostPath: &HostPathVolume{
+			Path: "/tmp/e2e-fixture-data",
+			Type: string(corev1.HostPathDirectory),
 		},
 	}
 	modelDataMount := VolumeMount{
@@ -325,14 +332,19 @@ func DefaultPodData(podName, namespace, modelName, testBatch string) PodTemplate
 		MountPath: "/keys",
 		ReadOnly:  true,
 	}
+	fixtureDataMount := VolumeMount{
+		Name:      "fixture-data",
+		MountPath: "/fixtures",
+		ReadOnly:  true,
+	}
 
 	data := PodTemplateData{
 		PodName:      podName,
 		Namespace:    namespace,
 		ModelName:    modelName,
 		TestBatch:    testBatch,
-		VolumeMounts: []VolumeMount{modelDataMount, keysDataMount},
-		Volumes:      []Volume{modelDataVolume, keysDataVolume},
+		VolumeMounts: []VolumeMount{modelDataMount, keysDataMount, fixtureDataMount},
+		Volumes:      []Volume{modelDataVolume, keysDataVolume, fixtureDataVolume},
 	}
 
 	return data

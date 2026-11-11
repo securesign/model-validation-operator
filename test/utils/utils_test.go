@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 func TestRedactCommand(t *testing.T) {
@@ -118,5 +120,35 @@ func TestKubectlGetBoundsRequestsAndPreservesResourceArguments(t *testing.T) {
 	output, err = KubectlGet("nodes", "", "", "")
 	if err != nil || !reflect.DeepEqual(GetNonEmptyLines(output), []string{"get", "nodes", "--request-timeout=15s"}) {
 		t.Errorf("cluster-wide list arguments: %q (%v)", output, err)
+	}
+}
+
+func TestDefaultPodDataMountsAllVerificationFixturesReadOnly(t *testing.T) {
+	data := DefaultPodData("test-pod", "test-namespace", "test-model", "test-batch")
+	if data.PodName != "test-pod" || data.Namespace != "test-namespace" ||
+		data.ModelName != "test-model" || data.TestBatch != "test-batch" {
+		t.Fatalf("pod identity fields were not preserved: %+v", data)
+	}
+	wantMounts := []VolumeMount{
+		{Name: "model-data", MountPath: "/data", ReadOnly: true},
+		{Name: "keys-data", MountPath: "/keys", ReadOnly: true},
+		{Name: "fixture-data", MountPath: "/fixtures", ReadOnly: true},
+	}
+	if !reflect.DeepEqual(data.VolumeMounts, wantMounts) {
+		t.Errorf("unexpected mounts: %+v", data.VolumeMounts)
+	}
+	wantVolumes := []Volume{
+		{Name: "model-data", HostPath: &HostPathVolume{
+			Path: "/tmp/e2e-model-data", Type: string(corev1.HostPathDirectory),
+		}},
+		{Name: "keys-data", HostPath: &HostPathVolume{
+			Path: "/tmp/e2e-keys-data", Type: string(corev1.HostPathDirectory),
+		}},
+		{Name: "fixture-data", HostPath: &HostPathVolume{
+			Path: "/tmp/e2e-fixture-data", Type: string(corev1.HostPathDirectory),
+		}},
+	}
+	if !reflect.DeepEqual(data.Volumes, wantVolumes) {
+		t.Errorf("unexpected hostPath sources: %+v", data.Volumes)
 	}
 }
