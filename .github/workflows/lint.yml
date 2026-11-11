@@ -38,6 +38,10 @@ jobs:
           install-mode: goinstall
           args: --timeout=5m --issues-exit-code=1 --verbose --build-tags=${{ matrix.tags }}
 
+      - name: Test metrics Pod security template without a cluster
+        if: matrix.tags == 'integration'
+        run: go test -race -count=1 -tags=integration ./test/e2e/ -run '^TestMetricsPodSecurityTemplate$'
+
   lint-gate:
     # Preserve the existing required-check name while requiring every partition
     # to pass.
