@@ -16,6 +16,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+const testPodName = "test-pod"
+
 var _ = Describe("PodReconciler", func() {
 	var (
 		ctx         context.Context
@@ -31,8 +33,8 @@ var _ = Describe("PodReconciler", func() {
 	Context("when reconciling Pod resources", func() {
 		It("should try to remove pods without ModelValidation label if previously tracked", func() {
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
-				Name:      "test-pod",
-				Namespace: "default",
+				Name:      testPodName,
+				Namespace: testNamespace,
 			})
 
 			fakeClient := testutil.SetupFakeClientWithObjects(pod)
@@ -55,15 +57,15 @@ var _ = Describe("PodReconciler", func() {
 			// Should try to remove the pod in case it was previously tracked
 			removeByNameCalls := mockTracker.GetRemovePodByNameCalls()
 			Expect(removeByNameCalls).To(HaveLen(1))
-			Expect(removeByNameCalls[0].Name).To(Equal("test-pod"))
-			Expect(removeByNameCalls[0].Namespace).To(Equal("default"))
+			Expect(removeByNameCalls[0].Name).To(Equal(testPodName))
+			Expect(removeByNameCalls[0].Namespace).To(Equal(testNamespace))
 		})
 
 		It("should process pods with finalizer but not being deleted", func() {
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
-				Name:       "test-pod",
-				Namespace:  "default",
-				Labels:     map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Name:       testPodName,
+				Namespace:  testNamespace,
+				Labels:     map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers: []string{constants.ModelValidationFinalizer},
 			})
 
@@ -90,10 +92,10 @@ var _ = Describe("PodReconciler", func() {
 		It("should handle pod deletion by removing finalizer", func() {
 			now := metav1.Now()
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
-				Name:              "test-pod",
-				Namespace:         "default",
+				Name:              testPodName,
+				Namespace:         testNamespace,
 				UID:               types.UID("test-uid"),
-				Labels:            map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:            map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers:        []string{constants.ModelValidationFinalizer},
 				DeletionTimestamp: &now,
 			})
@@ -129,10 +131,10 @@ var _ = Describe("PodReconciler", func() {
 		It("should handle pod with multiple finalizers being deleted", func() {
 			now := metav1.Now()
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
-				Name:              "test-pod",
-				Namespace:         "default",
+				Name:              testPodName,
+				Namespace:         testNamespace,
 				UID:               types.UID("test-uid"),
-				Labels:            map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:            map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers:        []string{"other-finalizer", constants.ModelValidationFinalizer, "another-finalizer"},
 				DeletionTimestamp: &now,
 			})
@@ -172,7 +174,7 @@ var _ = Describe("PodReconciler", func() {
 				Tracker: mockTracker,
 			}
 
-			req := testutil.CreateReconcileRequest("default", "deleted-pod")
+			req := testutil.CreateReconcileRequest(testNamespace, "deleted-pod")
 
 			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
@@ -181,7 +183,7 @@ var _ = Describe("PodReconciler", func() {
 			removeByNameCalls := mockTracker.GetRemovePodByNameCalls()
 			Expect(removeByNameCalls).To(HaveLen(1))
 			Expect(removeByNameCalls[0].Name).To(Equal("deleted-pod"))
-			Expect(removeByNameCalls[0].Namespace).To(Equal("default"))
+			Expect(removeByNameCalls[0].Namespace).To(Equal(testNamespace))
 		})
 	})
 })

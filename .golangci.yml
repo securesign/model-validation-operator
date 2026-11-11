@@ -27,7 +27,7 @@ linters:
     rules:
       - linters:
           - lll
-        source: "^// \\+kubebuilder:validation"
+        source: "^\\s*// \\+kubebuilder:validation"
 
 formatters:
   enable:

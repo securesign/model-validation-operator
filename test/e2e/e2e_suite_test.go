@@ -1,3 +1,5 @@
+//go:build integration || ha
+
 // Copyright 2025 The Sigstore Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -93,7 +95,7 @@ var _ = BeforeSuite(func() {
 	err := utils.KubectlApply(curlPodTemplate, templateData)
 	Expect(err).NotTo(HaveOccurred(), "Failed to create persistent metrics pod")
 
-	err = utils.KubectlWait("pod", curlMetricsPodName, operatorNamespace, "condition=Ready", "30s")
+	err = utils.KubectlWait("pod", curlMetricsPodName, operatorNamespace, "condition=Ready", resourceWaitTimeout)
 	Expect(err).NotTo(HaveOccurred(), "Failed to wait for persistent metrics pod to be ready")
 })
 
@@ -118,7 +120,7 @@ var _ = AfterSuite(func() {
 	}
 	if err := utils.KubectlDelete(curlPodTemplate, &utils.KubectlDeleteOptions{
 		IgnoreNotFound: true,
-		Timeout:        "30s",
+		Timeout:        resourceWaitTimeout,
 		TemplateData:   cleanupTemplateData,
 	}); err != nil {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Failed to cleanup metrics pod: %s\n", err)

@@ -1,3 +1,5 @@
+//go:build integration
+
 /*
 Copyright 2025.
 
@@ -94,11 +96,13 @@ var _ = Describe("ModelValidation Status Tracking", Ordered, func() {
 
 			By("cleaning up test resources")
 			_ = utils.KubectlDelete(podTemplate, &utils.KubectlDeleteOptions{
-				Timeout:        "30s",
+				Timeout:        resourceWaitTimeout,
 				IgnoreNotFound: true,
 				TemplateData:   defaultStatusPodData(statusTestPodName),
 			})
-			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{Timeout: "30s", IgnoreNotFound: true})
+			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{
+				Timeout: resourceWaitTimeout, IgnoreNotFound: true,
+			})
 		})
 
 		It("should handle multiple pods correctly", func() {
@@ -131,9 +135,13 @@ var _ = Describe("ModelValidation Status Tracking", Ordered, func() {
 				podToDelete := fmt.Sprintf(
 					"apiVersion: v1\nkind: Pod\nmetadata:\n  name: %s\n  namespace: %s",
 					fmt.Sprintf("status-test-pod-%d", i), webhookTestNamespace)
-				_ = utils.KubectlDelete([]byte(podToDelete), &utils.KubectlDeleteOptions{Timeout: "30s", IgnoreNotFound: true})
+				_ = utils.KubectlDelete([]byte(podToDelete), &utils.KubectlDeleteOptions{
+					Timeout: resourceWaitTimeout, IgnoreNotFound: true,
+				})
 			}
-			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{Timeout: "30s", IgnoreNotFound: true})
+			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{
+				Timeout: resourceWaitTimeout, IgnoreNotFound: true,
+			})
 		})
 
 		It("should track pod deletion and update counts", func() {
@@ -172,7 +180,9 @@ var _ = Describe("ModelValidation Status Tracking", Ordered, func() {
 			Eventually(verifyPodDeletion, 30*time.Second).Should(Succeed())
 
 			By("cleaning up ModelValidation CR")
-			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{Timeout: "30s", IgnoreNotFound: true})
+			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{
+				Timeout: resourceWaitTimeout, IgnoreNotFound: true,
+			})
 		})
 	})
 })

@@ -12,6 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+const (
+	testNamespace = testutil.DefaultNamespace
+	testModelName = "test-mv"
+)
+
 var _ = Describe("ModelValidationReconciler", func() {
 	var (
 		ctx         context.Context
@@ -27,8 +32,8 @@ var _ = Describe("ModelValidationReconciler", func() {
 	Context("when reconciling ModelValidation resources", func() {
 		It("should call tracker for each reconcile", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 
 			fakeClient := testutil.SetupFakeClientWithObjects(mv)
@@ -68,7 +73,7 @@ var _ = Describe("ModelValidationReconciler", func() {
 			now := metav1.Now()
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:              "test-mv-deleting",
-				Namespace:         "default",
+				Namespace:         testNamespace,
 				DeletionTimestamp: &now,
 				Finalizers:        []string{"test-finalizer"},
 			})
@@ -104,7 +109,7 @@ var _ = Describe("ModelValidationReconciler", func() {
 				Tracker: mockTracker,
 			}
 
-			namespace := "default"
+			namespace := testNamespace
 			name := "deleted-mv"
 			req := testutil.CreateReconcileRequest(namespace, name)
 

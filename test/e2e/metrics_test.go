@@ -1,3 +1,5 @@
+//go:build integration
+
 /*
 Copyright 2025.
 
@@ -30,6 +32,12 @@ import (
 	utils "github.com/sigstore/model-validation-operator/test/utils"
 )
 
+const (
+	metricNamespaceLabel = "namespace"
+	metricModelLabel     = "model_validation"
+	metricPodStateLabel  = "pod_state"
+)
+
 const metricsTestPodName = "metrics-test-pod"
 const metricsTestModelName = "metrics-test-model"
 
@@ -57,9 +65,9 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 
 			By("getting baseline metrics before pod creation")
 			injectedLabels := map[string]string{
-				"namespace":        webhookTestNamespace,
-				"model_validation": metricsTestModelName,
-				"pod_state":        metrics.PodStateInjected,
+				metricNamespaceLabel: webhookTestNamespace,
+				metricModelLabel:     metricsTestModelName,
+				metricPodStateLabel:  metrics.PodStateInjected,
 			}
 			baselineInjectedCount := utils.GetMetricValue(
 				"model_validation_operator_modelvalidation_pod_count", injectedLabels,
@@ -77,7 +85,7 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 
 			By("cleaning up test resources - deleting pod first")
 			_ = utils.KubectlDelete(podTemplate, &utils.KubectlDeleteOptions{
-				Timeout:        "30s",
+				Timeout:        resourceWaitTimeout,
 				IgnoreNotFound: true,
 				TemplateData:   defaultMetricsPodData(metricsTestPodName),
 			})
@@ -89,7 +97,7 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 			}, 30*time.Second, 5*time.Second).Should(Equal(baselineInjectedCount))
 
 			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{
-				Timeout:        "30s",
+				Timeout:        resourceWaitTimeout,
 				IgnoreNotFound: true,
 				TemplateData: utils.CRTemplateData{
 					ModelName: metricsTestModelName,
@@ -101,9 +109,9 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 		It("should track status update metrics", func() {
 			By("getting baseline status update metrics")
 			statusLabels := map[string]string{
-				"namespace":        webhookTestNamespace,
-				"model_validation": metricsTestModelName,
-				"result":           "success",
+				metricNamespaceLabel: webhookTestNamespace,
+				metricModelLabel:     metricsTestModelName,
+				"result":             "success",
 			}
 			baselineSuccessCount := utils.GetMetricValue(
 				"model_validation_operator_status_updates_total", statusLabels,
@@ -124,7 +132,7 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 
 			By("cleaning up test resources")
 			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{
-				Timeout:        "30s",
+				Timeout:        resourceWaitTimeout,
 				IgnoreNotFound: true,
 				TemplateData: utils.CRTemplateData{
 					ModelName: metricsTestModelName,
@@ -147,10 +155,10 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 
 			By("getting baseline transition metrics for injected -> orphaned")
 			transitionLabels := map[string]string{
-				"from_state":       metrics.PodStateInjected,
-				"to_state":         metrics.PodStateOrphaned,
-				"namespace":        webhookTestNamespace,
-				"model_validation": metricsTestModelName,
+				"from_state":         metrics.PodStateInjected,
+				"to_state":           metrics.PodStateOrphaned,
+				metricNamespaceLabel: webhookTestNamespace,
+				metricModelLabel:     metricsTestModelName,
 			}
 			baselineTransitionCount := utils.GetMetricValue(
 				"model_validation_operator_pod_state_transitions_total", transitionLabels,
@@ -173,13 +181,13 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 			By("cleaning up test resources")
 			podData := defaultMetricsPodData(fmt.Sprintf("%s-transition", metricsTestPodName))
 			_ = utils.KubectlDelete(podTemplate, &utils.KubectlDeleteOptions{
-				Timeout:        "30s",
+				Timeout:        resourceWaitTimeout,
 				IgnoreNotFound: true,
 				TemplateData:   podData,
 			})
 
 			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{
-				Timeout:        "30s",
+				Timeout:        resourceWaitTimeout,
 				IgnoreNotFound: true,
 				TemplateData: utils.CRTemplateData{
 					ModelName: metricsTestModelName,
@@ -191,7 +199,7 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 		It("should track ModelValidation CR count per namespace", func() {
 			By("getting baseline transition metrics for namespace count")
 			namespaceLabels := map[string]string{
-				"namespace": webhookTestNamespace,
+				metricNamespaceLabel: webhookTestNamespace,
 			}
 			namespaceCount := utils.GetMetricValue(
 				"model_validation_operator_modelvalidation_crs_total", namespaceLabels,
@@ -214,7 +222,7 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 			By("cleaning up test resources")
 			for i := 1; i <= 2; i++ {
 				_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{
-					Timeout:        "30s",
+					Timeout:        resourceWaitTimeout,
 					IgnoreNotFound: true,
 				})
 			}
@@ -244,9 +252,9 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 			baselineInjectedCount := utils.ExtractMetricValue(baselineMetrics,
 				"model_validation_operator_modelvalidation_pod_count",
 				map[string]string{
-					"namespace":        webhookTestNamespace,
-					"model_validation": metricsTestModelName,
-					"pod_state":        metrics.PodStateInjected,
+					metricNamespaceLabel: webhookTestNamespace,
+					metricModelLabel:     metricsTestModelName,
+					metricPodStateLabel:  metrics.PodStateInjected,
 				})
 
 			By("deploying a pod")
@@ -259,9 +267,9 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 				currentInjectedCount := utils.ExtractMetricValue(currentMetrics,
 					"model_validation_operator_modelvalidation_pod_count",
 					map[string]string{
-						"namespace":        webhookTestNamespace,
-						"model_validation": metricsTestModelName,
-						"pod_state":        metrics.PodStateInjected,
+						metricNamespaceLabel: webhookTestNamespace,
+						metricModelLabel:     metricsTestModelName,
+						metricPodStateLabel:  metrics.PodStateInjected,
 					})
 				g.Expect(currentInjectedCount).To(Equal(baselineInjectedCount + 1))
 			}, 30*time.Second, 5*time.Second).Should(Succeed())
@@ -279,16 +287,16 @@ var _ = Describe("ModelValidation Metrics", Ordered, func() {
 				currentInjectedCount := utils.ExtractMetricValue(currentMetrics,
 					"model_validation_operator_modelvalidation_pod_count",
 					map[string]string{
-						"namespace":        webhookTestNamespace,
-						"model_validation": metricsTestModelName,
-						"pod_state":        metrics.PodStateInjected,
+						metricNamespaceLabel: webhookTestNamespace,
+						metricModelLabel:     metricsTestModelName,
+						metricPodStateLabel:  metrics.PodStateInjected,
 					})
 				g.Expect(currentInjectedCount).To(Equal(baselineInjectedCount))
 			}, 30*time.Second, 5*time.Second).Should(Succeed())
 
 			By("cleaning up test resources")
 			_ = utils.KubectlDelete(modelValidationTemplate, &utils.KubectlDeleteOptions{
-				Timeout:        "30s",
+				Timeout:        resourceWaitTimeout,
 				IgnoreNotFound: true,
 				TemplateData: utils.CRTemplateData{
 					ModelName: metricsTestModelName,
