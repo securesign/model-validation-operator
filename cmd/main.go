@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var disableWebhook bool
+	var preStopDelay time.Duration
 	var tlsOpts []func(*tls.Config)
 
 	// Status tracker configuration
@@ -111,6 +113,8 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&disableWebhook, "disable-webhook", false,
 		"Disable the webhook server for development environments without certificates.")
+	flag.DurationVar(&preStopDelay, "pre-stop-delay", 0,
+		"Wait for this duration and exit without starting the manager, for Pod preStop hooks.")
 	utils.StringFlagOrEnv(&constants.ModelValidationAgentImage,
 		"validation-agent-image",
 		"VALIDATION_AGENT_IMAGE",
@@ -135,6 +139,15 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+	if preStopDelay < 0 {
+		fmt.Fprintln(os.Stderr, "pre-stop-delay must not be negative")
+		os.Exit(2)
+	}
+	if preStopDelay > 0 {
+		// Keep the serving manager alive while terminating endpoints propagate.
+		time.Sleep(preStopDelay)
+		return
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -284,6 +297,10 @@ func main() {
 	}
 
 	if !disableWebhook {
+		if err := mgr.AddReadyzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
+			setupLog.Error(err, "unable to set up webhook ready check")
+			os.Exit(1)
+		}
 		decoder := admission.NewDecoder(mgr.GetScheme())
 		interceptor := webhooks.NewPodInterceptor(mgr.GetClient(), decoder)
 		mgr.GetWebhookServer().Register("/mutate-v1-pod", &admission.Webhook{

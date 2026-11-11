@@ -88,10 +88,16 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
+        lifecycle:
+          preStop:
+            exec:
+              # The manager image has no shell. Delay SIGTERM until Service
+              # endpoints stop routing new admission requests to this Pod.
+              command: ["/manager", "--pre-stop-delay=10s"]
         # TODO(user): Configure the resources accordingly based on the project requirements.
         # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
         resources: {}
         volumeMounts: []
       volumes: []
       serviceAccountName: controller-manager
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: 45

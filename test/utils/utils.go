@@ -357,9 +357,20 @@ func GetMetricsOutput(namespace, podName string) string {
 		return ""
 	}
 
+	metricsHost := fmt.Sprintf("%s.%s.svc.cluster.local", MetricsServiceName, namespace)
+	holderIdentity, holderErr := KubectlGet("lease", "2b2639c9.sigstore.dev", namespace,
+		"jsonpath={.spec.holderIdentity}")
+	if holderErr == nil && holderIdentity != "" {
+		leaderPod := strings.SplitN(holderIdentity, "_", 2)[0]
+		podIP, podErr := KubectlGet("pod", leaderPod, namespace, "jsonpath={.status.podIP}")
+		if podErr == nil && podIP != "" {
+			metricsHost = podIP
+		}
+	}
+
 	curlCommand := fmt.Sprintf(
-		"curl -s -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics 2>/dev/null",
-		token, MetricsServiceName, namespace)
+		"curl -s -k -H 'Authorization: Bearer %s' https://%s:8443/metrics 2>/dev/null",
+		token, metricsHost)
 	execCmd := exec.Command("kubectl", "exec", podName, "-n", namespace,
 		"--", "/bin/sh", "-c", curlCommand)
 

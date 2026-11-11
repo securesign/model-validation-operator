@@ -6,6 +6,20 @@ metadata:
 spec:
   template:
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              # Compare replicas from the same rollout revision. Counting old
+              # replicas can place both replacements on the other worker.
+              matchLabelKeys:
+              - pod-template-hash
+              labelSelector:
+                matchLabels:
+                  control-plane: controller-manager
+                  app.kubernetes.io/name: model-validation-operator
       containers:
       - name: manager
         resources:

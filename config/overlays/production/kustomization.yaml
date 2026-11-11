@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
 - ../../default
+- poddisruptionbudget.yaml
 
 components:
 - ../../components/webhook
