@@ -258,7 +258,6 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/overlays/production && $(KUSTOMIZE) edit set image controller=${IMG}
-	cd config/overlays/production && $(KUSTOMIZE) edit set replicas controller-manager=1
 	$(KUSTOMIZE) build config/overlays/production | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
@@ -604,6 +603,10 @@ test-e2e: manifests generate fmt vet ## Run all E2E partitions against configure
 test-e2e-integration: manifests generate fmt vet ## Run only the integration-tagged E2E partition.
 	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m
 
+.PHONY: test-e2e-ha
+test-e2e-ha: manifests generate fmt vet ## Run disruptive HA tests against an existing multi-node cluster.
+	go test -tags=ha ./test/e2e/ -v -ginkgo.v -timeout 30m
+
 .PHONY: test-e2e-full
 test-e2e-full: manifests generate fmt vet e2e-setup ## Run e2e tests with setup and teardown
 	@echo "Running e2e tests with full infrastructure setup..."
@@ -616,6 +619,10 @@ test-e2e-full: manifests generate fmt vet e2e-setup ## Run e2e tests with setup 
 test-e2e-ci: manifests generate fmt vet e2e-setup ## Run the e2e tests, with setup.  No teardown as the CI workflow will throw away kind
 	@echo "Running e2e tests with infrastructure setup for CI..."
 	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m
+
+.PHONY: test-e2e-ha-ci
+test-e2e-ha-ci: manifests generate fmt vet e2e-setup ## Set up and run HA tests in CI.
+	go test -tags=ha ./test/e2e/ -v -ginkgo.v -timeout 30m
 
 ##@ OLM E2E Test Infrastructure
 

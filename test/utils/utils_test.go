@@ -15,6 +15,7 @@
 package utils_test //nolint:revive
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -107,22 +108,6 @@ func fakeKubectl(t *testing.T, script string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func TestKubectlGetBoundsRequestsAndPreservesResourceArguments(t *testing.T) {
-	fakeKubectl(t, "#!/bin/sh\nprintf '%s\\n' \"$@\"\n")
-	output, err := KubectlGet("pods", "test-pod", "test-namespace", "json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"get", "pods", "--request-timeout=15s", "test-pod", "-n", "test-namespace", "-o", "json"}
-	if !reflect.DeepEqual(GetNonEmptyLines(output), want) {
-		t.Errorf("kubectl arguments: %q, want %q", GetNonEmptyLines(output), want)
-	}
-	output, err = KubectlGet("nodes", "", "", "")
-	if err != nil || !reflect.DeepEqual(GetNonEmptyLines(output), []string{"get", "nodes", "--request-timeout=15s"}) {
-		t.Errorf("cluster-wide list arguments: %q (%v)", output, err)
-	}
-}
-
 func TestDefaultPodDataMountsAllVerificationFixturesReadOnly(t *testing.T) {
 	data := DefaultPodData("test-pod", "test-namespace", "test-model", "test-batch")
 	if data.PodName != "test-pod" || data.Namespace != "test-namespace" ||
@@ -150,5 +135,76 @@ func TestDefaultPodDataMountsAllVerificationFixturesReadOnly(t *testing.T) {
 	}
 	if !reflect.DeepEqual(data.Volumes, wantVolumes) {
 		t.Errorf("unexpected hostPath sources: %+v", data.Volumes)
+	}
+}
+
+func TestKubectlGetBoundsRequestsAndPreservesResourceArguments(t *testing.T) {
+	fakeKubectl(t, "#!/bin/sh\nprintf '%s\\n' \"$@\"\n")
+	output, err := KubectlGet("pods", "test-pod", "test-namespace", "json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"get", "pods", "--request-timeout=15s", "test-pod", "-n", "test-namespace", "-o", "json"}
+	if !reflect.DeepEqual(GetNonEmptyLines(output), want) {
+		t.Errorf("kubectl arguments: %q, want %q", GetNonEmptyLines(output), want)
+	}
+	output, err = KubectlGet("nodes", "", "", "")
+	if err != nil || !reflect.DeepEqual(GetNonEmptyLines(output), []string{"get", "nodes", "--request-timeout=15s"}) {
+		t.Errorf("cluster-wide list arguments: %q (%v)", output, err)
+	}
+}
+
+func TestGetMetricsOutputTargetsLeaderOrFallsBackToService(t *testing.T) {
+	fakeKubectl(t, `#!/bin/sh
+case "$1 $2" in
+"create token")
+  [ "$MVO_METRICS_MODE" != "token-error" ] || exit 1
+  [ "$3" = "e2e-metrics-reader" ] || exit 2
+  printf 'test-metrics-token'
+  ;;
+"get lease")
+  [ "$MVO_METRICS_MODE" != "lease-error" ] || exit 1
+  [ "$MVO_METRICS_MODE" != "lease-empty" ] || exit 0
+  printf 'manager-leader_lease-identity'
+  ;;
+"get pod")
+  [ "$MVO_METRICS_MODE" != "pod-error" ] || exit 1
+  [ "$MVO_METRICS_MODE" != "pod-empty" ] || exit 0
+  [ "$4" = "manager-leader" ] || exit 2
+  printf '10.0.0.17'
+  ;;
+"exec metrics-reader")
+  [ "$MVO_METRICS_MODE" != "exec-error" ] || exit 1
+  for arg in "$@"; do last=$arg; done
+  printf '%s' "$last"
+  ;;
+*) exit 2;;
+esac
+`)
+	const serviceHost = "model-validation-controller-manager-metrics-service.test-namespace.svc.cluster.local"
+	for _, test := range []struct {
+		mode string
+		host string
+	}{
+		{mode: "leader", host: "10.0.0.17"},
+		{mode: "lease-error", host: serviceHost},
+		{mode: "lease-empty", host: serviceHost},
+		{mode: "pod-error", host: serviceHost},
+		{mode: "pod-empty", host: serviceHost},
+		{mode: "token-error"},
+		{mode: "exec-error"},
+	} {
+		t.Run(test.mode, func(t *testing.T) {
+			t.Setenv("MVO_METRICS_MODE", test.mode)
+			output := GetMetricsOutput("test-namespace", "metrics-reader")
+			want := ""
+			if test.host != "" {
+				want = fmt.Sprintf(
+					"curl -s -k -H 'Authorization: Bearer test-metrics-token' https://%s:8443/metrics 2>/dev/null", test.host)
+			}
+			if output != want {
+				t.Errorf("metrics command: %q, want %q", output, want)
+			}
+		})
 	}
 }
