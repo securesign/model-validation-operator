@@ -7,6 +7,12 @@ metadata:
     validation.ml.sigstore.dev/ml: "{{.ModelName}}"{{if .TestBatch}}
     test-batch: "{{.TestBatch}}"{{end}}
 spec:
+  terminationGracePeriodSeconds: 5
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
   restartPolicy: Never
   containers:
   - name: test-container

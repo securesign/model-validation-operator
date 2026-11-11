@@ -627,7 +627,9 @@ test-e2e-ha-ci: manifests generate fmt vet e2e-setup ## Set up and run HA tests 
 ##@ OLM E2E Test Infrastructure
 
 # OLM E2E Variables
-OLM_NAMESPACE ?= $(shell $(KUBECTL) get ns openshift-operator-lifecycle-manager --no-headers >/dev/null 2>&1 && echo openshift-operator-lifecycle-manager || echo olm)
+# Catalogs outside the marketplace namespace are local to their Subscription.
+# The OLM controller namespace is unrelated to CatalogSource visibility.
+OLM_CATALOG_NAMESPACE ?= $(E2E_OPERATOR_NAMESPACE)
 OLM_CHANNEL ?= tech-preview
 OLM_PACKAGE ?= model-validation-operator
 
@@ -643,12 +645,16 @@ e2e-uninstall-olm: operator-sdk ## Uninstall OLM from the cluster
 .PHONY: e2e-olm-teardown
 e2e-olm-teardown: ## Tear down OLM e2e test environment
 	@echo "Tearing down OLM e2e test environment..."
-	-$(KUBECTL) delete subscription --all -n $(E2E_OPERATOR_NAMESPACE) --timeout=30s
-	-$(KUBECTL) delete csv --all -n $(E2E_OPERATOR_NAMESPACE) --timeout=60s
-	-$(KUBECTL) delete operatorgroup --all -n $(E2E_OPERATOR_NAMESPACE) --timeout=30s
-	-$(KUBECTL) delete catalogsource model-validation-test-catalog -n $(OLM_NAMESPACE) --timeout=30s --ignore-not-found=true
-	-$(KUBECTL) delete pods --all -n $(E2E_TEST_NAMESPACE) --timeout=30s
-	-$(KUBECTL) delete modelvalidations --all -n $(E2E_TEST_NAMESPACE) --timeout=30s
+	$(KUBECTL) delete pods olm-test-pod-initial olm-test-pod-upgrade -n $(E2E_TEST_NAMESPACE) --ignore-not-found --timeout=30s
+	$(KUBECTL) delete modelvalidation olm-upgrade-test-model -n $(E2E_TEST_NAMESPACE) --ignore-not-found --timeout=30s
+	@csv_names=$$($(KUBECTL) get subscription model-validation-operator -n $(E2E_OPERATOR_NAMESPACE) --ignore-not-found \
+		-o jsonpath='{.status.installedCSV}{" "}{.status.currentCSV}'); \
+	$(KUBECTL) delete subscription model-validation-operator -n $(E2E_OPERATOR_NAMESPACE) --ignore-not-found --timeout=30s; \
+	for csv in $$csv_names; do \
+		$(KUBECTL) delete csv "$$csv" -n $(E2E_OPERATOR_NAMESPACE) --ignore-not-found --timeout=60s; \
+	done
+	$(KUBECTL) delete operatorgroup model-validation-og -n $(E2E_OPERATOR_NAMESPACE) --ignore-not-found --timeout=30s
+	$(KUBECTL) delete catalogsource model-validation-test-catalog -n $(OLM_CATALOG_NAMESPACE) --ignore-not-found --timeout=30s
 
 .PHONY: test-e2e-olm
 test-e2e-olm: manifests generate fmt vet ## Run OLM upgrade e2e tests

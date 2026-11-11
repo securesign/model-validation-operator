@@ -38,6 +38,12 @@ jobs:
           install-mode: goinstall
           args: --timeout=5m --issues-exit-code=1 --verbose --build-tags=${{ matrix.tags }}
 
+      - name: Test OLM configuration and lifecycle helpers without a cluster
+        if: matrix.tags == 'upgrade'
+        run: >-
+          go test -race -count=1 -tags=upgrade ./test/e2e-olm/
+          -run '^(TestUpgradeConfig.*|TestControllerRollout|TestCatalogTemplate|TestExistingCSVs|TestCleanup.*|TestSubscriptionCSVNames)$'
+
       - name: Test metrics Pod security template without a cluster
         if: matrix.tags == 'integration'
         run: go test -race -count=1 -tags=integration ./test/e2e/ -run '^TestMetricsPodSecurityTemplate$'
