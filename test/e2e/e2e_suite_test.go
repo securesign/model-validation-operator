@@ -18,8 +18,11 @@
 package e2e
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +39,8 @@ var (
 )
 
 const (
+	podResource = "pod"
+
 	// operatorNamespace is the namespace where the project is deployed in
 	operatorNamespace = "model-validation-operator-system"
 
@@ -76,7 +81,7 @@ var _ = BeforeSuite(func() {
 		controllerPodName = output
 
 		// Verify the pod is ready
-		phase, err := utils.KubectlGet("pod", controllerPodName, operatorNamespace, "jsonpath={.status.phase}")
+		phase, err := utils.KubectlGet(podResource, controllerPodName, operatorNamespace, "jsonpath={.status.phase}")
 		if err != nil {
 			return err
 		}
@@ -87,45 +92,86 @@ var _ = BeforeSuite(func() {
 	}, 1*time.Minute, 5*time.Second).Should(Succeed(), "Controller pod should be running")
 
 	By("setting up persistent metrics pod")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	apiVersions, err := utils.Run(exec.CommandContext(ctx, "kubectl", "api-versions", "--request-timeout=10s"))
+	cancel()
+	Expect(err).NotTo(HaveOccurred(), "Failed to discover cluster APIs for metrics Pod security")
 	templateData := utils.CurlPodTemplateData{
 		PodName:        curlMetricsPodName,
 		Namespace:      operatorNamespace,
 		ServiceAccount: utils.MetricsServiceAccountName,
+		RunAsUser:      metricsPodRunAsUser(apiVersions),
 	}
-	err := utils.KubectlApply(curlPodTemplate, templateData)
+	err = utils.KubectlApply(curlPodTemplate, templateData)
+	if err != nil {
+		captureMetricsPodDiagnostics()
+	}
 	Expect(err).NotTo(HaveOccurred(), "Failed to create persistent metrics pod")
 
-	err = utils.KubectlWait("pod", curlMetricsPodName, operatorNamespace, "condition=Ready", resourceWaitTimeout)
+	err = utils.KubectlWait(podResource, curlMetricsPodName, operatorNamespace, "condition=Ready", resourceWaitTimeout)
+	if err != nil {
+		captureMetricsPodDiagnostics()
+	}
 	Expect(err).NotTo(HaveOccurred(), "Failed to wait for persistent metrics pod to be ready")
 })
 
+// Kubernetes needs a numeric UID to verify runAsNonRoot with the curl image's
+// named default user. OpenShift's restricted SCC supplies its namespace UID.
+func metricsPodRunAsUser(apiVersions string) *int64 {
+	if slices.Contains(strings.Fields(apiVersions), "security.openshift.io/v1") {
+		return nil
+	}
+	uid := int64(1000)
+	return &uid
+}
+
+// BeforeSuite failures do not run AfterEach diagnostics. Record the waiting
+// reason and events before AfterSuite removes the metrics helper.
+func captureMetricsPodDiagnostics() {
+	commands := [][]string{
+		{"get", podResource, curlMetricsPodName, "-n", operatorNamespace, "-o", "yaml"},
+		{"describe", podResource, curlMetricsPodName, "-n", operatorNamespace},
+		{"get", "events", "-n", operatorNamespace, "--field-selector=involvedObject.name=" + curlMetricsPodName},
+	}
+	for _, args := range commands {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		output, err := utils.Run(exec.CommandContext(ctx, "kubectl", append(args, "--request-timeout=10s")...))
+		cancel()
+		_, _ = fmt.Fprintf(GinkgoWriter, "Metrics setup diagnostic %v:\n%s\nerror: %v\n", args, output, err)
+	}
+}
+
 var _ = AfterSuite(func() {
 	By("cleaning up test resources")
-
-	// Clean up any test resources that may have been created during tests
-	By("cleaning up test pods and CRs")
-	cmd := exec.Command("kubectl", "delete", "pods", "--all", "-n", webhookTestNamespace,
-		"--timeout=30s", "--ignore-not-found=true")
-	_, _ = utils.Run(cmd)
-
-	cmd = exec.Command("kubectl", "delete", "modelvalidations", "--all", "-n", webhookTestNamespace,
-		"--timeout=30s", "--ignore-not-found=true")
-	_, _ = utils.Run(cmd)
-
-	By("cleaning up persistent metrics pod")
-	cleanupTemplateData := utils.CurlPodTemplateData{
-		PodName:        curlMetricsPodName,
-		Namespace:      operatorNamespace,
-		ServiceAccount: utils.MetricsServiceAccountName,
+	// The workload namespace is dedicated to this suite, but fixture DaemonSet
+	// Pods are reusable infrastructure, not test workloads. Metrics resources are
+	// individually named because the operator namespace also hosts the manager.
+	// Attempt every step before failing, so one stuck finalizer does not prevent
+	// cleanup of unrelated test objects. Bound both API requests and each process.
+	steps := []struct {
+		name string
+		args []string
+	}{
+		{name: "test pods", args: []string{"pods", "--selector=app!=model-data-setup", "-n", webhookTestNamespace}},
+		{name: "test CRs", args: []string{"modelvalidations", "--all", "-n", webhookTestNamespace}},
+		{name: "metrics pod", args: []string{podResource, curlMetricsPodName, "-n", operatorNamespace}},
+		{name: "metrics service account", args: []string{"serviceaccount", utils.MetricsServiceAccountName,
+			"-n", operatorNamespace}},
+		{name: "metrics role binding", args: []string{"clusterrolebinding", utils.MetricsServiceAccountName + "-binding"}},
 	}
-	if err := utils.KubectlDelete(curlPodTemplate, &utils.KubectlDeleteOptions{
-		IgnoreNotFound: true,
-		Timeout:        resourceWaitTimeout,
-		TemplateData:   cleanupTemplateData,
-	}); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Failed to cleanup metrics pod: %s\n", err)
+	var cleanupErrors []error
+	for _, step := range steps {
+		By("cleaning up " + step.name)
+		args := append([]string{"delete"}, step.args...)
+		args = append(args, "--timeout=30s", "--request-timeout=15s", "--ignore-not-found=true")
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		_, err := utils.Run(exec.CommandContext(ctx, "kubectl", args...))
+		cancel()
+		if err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("%s: %w", step.name, err))
+		}
 	}
-
+	Expect(errors.Join(cleanupErrors...)).To(Succeed(), "suite cleanup failed after attempting every cleanup step")
 	_, _ = fmt.Fprintf(GinkgoWriter, "Test cleanup complete.\n")
 })
 
@@ -152,7 +198,7 @@ var _ = AfterEach(func() {
 			By(fmt.Sprintf("Capturing logs and description for pod: %s", podName))
 
 			// Pod description
-			if podDesc, err := utils.KubectlDescribe("pod", podName, webhookTestNamespace); err == nil {
+			if podDesc, err := utils.KubectlDescribe(podResource, podName, webhookTestNamespace); err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "=== Pod %s description ===\n%s\n", podName, podDesc)
 			} else {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to describe pod %s: %s\n", podName, err)

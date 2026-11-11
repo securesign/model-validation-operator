@@ -607,10 +607,10 @@ test-e2e-integration: manifests generate fmt vet ## Run only the integration-tag
 .PHONY: test-e2e-full
 test-e2e-full: manifests generate fmt vet e2e-setup ## Run e2e tests with setup and teardown
 	@echo "Running e2e tests with full infrastructure setup..."
-	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m; \
-	TEST_RESULT=$$?; \
-	$(MAKE) e2e-teardown; \
-	exit $$TEST_RESULT
+	@result=0; \
+	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m || result=$$?; \
+	$(MAKE) e2e-teardown || { cleanup_result=$$?; if [ $$result -eq 0 ]; then result=$$cleanup_result; fi; }; \
+	exit $$result
 
 .PHONY: test-e2e-ci
 test-e2e-ci: manifests generate fmt vet e2e-setup ## Run the e2e tests, with setup.  No teardown as the CI workflow will throw away kind
