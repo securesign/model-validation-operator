@@ -5,6 +5,8 @@ metadata:
   namespace: {{.Namespace}}
 spec:
   sourceType: grpc
+  grpcPodConfig:
+    securityContextConfig: restricted
   image: {{.Image}}
   displayName: Model Validation Operator Test Catalog
   publisher: E2E Tests

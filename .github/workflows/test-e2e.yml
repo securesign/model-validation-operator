@@ -228,5 +228,8 @@ jobs:
         env:
           TEST_BASE_CATALOG: registry.redhat.io/redhat/redhat-operator-index:${{ vars.OLM_INDEX_VERSION }}
           TEST_TARGET_CATALOG: ${{ env.CATALOG_IMG }}
+          # CI creates a next-patch upgrade candidate, not an approved GA release.
+          TEST_EXPECTED_TARGET_CSV: model-validation-operator.v${{ env.OLM_UPGRADE_VERSION }}
+          TEST_EXPECTED_TARGET_IMAGE: ${{ env.IMG }}
         run: |
           go test -tags=upgrade ./test/e2e-olm/ -v -ginkgo.v -timeout 20m
