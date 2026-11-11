@@ -1,0 +1,29 @@
+# Copyright 2026 The Sigstore Authors.
+# Licensed under the Apache License, Version 2.0 (the "License");
+
+FROM golang:1.26 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG AGENT_IMG
+
+WORKDIR /workspace
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd/ cmd/
+COPY api/ api/
+COPY internal/ internal/
+
+# Atomic mode is required by runtime/coverage.WriteCounters. The coverage tag
+# embeds Coverport's HTTP collector on port 53700.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
+    -cover -covermode=atomic -tags=coverage -a \
+    -ldflags="-X github.com/sigstore/model-validation-operator/internal/constants.ModelValidationAgentImage=${AGENT_IMG}" \
+    -o manager ./cmd
+
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/manager .
+USER 65532:65532
+
+ENTRYPOINT ["/manager"]

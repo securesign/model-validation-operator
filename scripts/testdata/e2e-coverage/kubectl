@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+case " $* " in
+    *" get pods "*)
+        case "${MOCK_MODE:-success}" in
+            api-error) echo "mock API failure" >&2; exit 1 ;;
+            zero-pods) echo '{"items":[]}'; exit 0 ;;
+            invalid-list) echo '{"error":"not a PodList"}'; exit 0 ;;
+        esac
+        jq -n --arg generation "${MOCK_GENERATION:-1}" '{items: ["a", "b"] | map({
+            metadata: {name: ("manager-" + .), uid: ("uid-" + . + "-" + $generation)},
+            status: {phase: "Running", containerStatuses: [{name: "manager", restartCount: 0, state: {running: {}}}]}
+        })}'
+        ;;
+    *" port-forward "*)
+        echo "$$" >> "$MOCK_STATE/forward-pids"
+        trap 'exit 0' TERM INT
+        [[ "${MOCK_MODE:-success}" != port-forward-error ]] || exit 1
+        echo "Forwarding from 127.0.0.1:54321 -> 53700"
+        while :; do sleep 0.1; done
+        ;;
+    *) echo "unexpected kubectl command: $*" >&2; exit 1 ;;
+esac
