@@ -595,14 +595,19 @@ e2e-teardown: e2e-cleanup-resources undeploy e2e-uninstall-certmanager
 # run e2e tests
 
 .PHONY: test-e2e
-test-e2e: manifests generate fmt vet ## Run the e2e tests, no setup and teardown.  Expects the operator to be deployed.
-	@echo "Running e2e tests (assumes infrastructure is already set up)..."
-	go test ./test/e2e/ -v -ginkgo.v
+# Full execution requires a multi-node cluster, deployed operator and OLM catalogs.
+# CI uses the partition-specific targets to provision each environment separately.
+test-e2e: manifests generate fmt vet ## Run all E2E partitions against configured infrastructure.
+	go test -tags=integration,ha,upgrade ./test/e2e/ ./test/e2e-olm/ -v -ginkgo.v -timeout 30m
+
+.PHONY: test-e2e-integration
+test-e2e-integration: manifests generate fmt vet ## Run only the integration-tagged E2E partition.
+	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m
 
 .PHONY: test-e2e-full
 test-e2e-full: manifests generate fmt vet e2e-setup ## Run e2e tests with setup and teardown
 	@echo "Running e2e tests with full infrastructure setup..."
-	go test ./test/e2e/ -v -ginkgo.v; \
+	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m; \
 	TEST_RESULT=$$?; \
 	$(MAKE) e2e-teardown; \
 	exit $$TEST_RESULT
@@ -610,7 +615,7 @@ test-e2e-full: manifests generate fmt vet e2e-setup ## Run e2e tests with setup 
 .PHONY: test-e2e-ci
 test-e2e-ci: manifests generate fmt vet e2e-setup ## Run the e2e tests, with setup.  No teardown as the CI workflow will throw away kind
 	@echo "Running e2e tests with infrastructure setup for CI..."
-	go test ./test/e2e/ -v -ginkgo.v
+	go test -tags=integration ./test/e2e/ -v -ginkgo.v -timeout 30m
 
 ##@ OLM E2E Test Infrastructure
 
@@ -641,5 +646,7 @@ e2e-olm-teardown: ## Tear down OLM e2e test environment
 .PHONY: test-e2e-olm
 test-e2e-olm: manifests generate fmt vet ## Run OLM upgrade e2e tests
 	@echo "Running OLM upgrade e2e tests..."
-	go test ./test/e2e-olm/ -v -ginkgo.v -timeout 20m
+	go test -tags=upgrade ./test/e2e-olm/ -v -ginkgo.v -timeout 20m
 
+.PHONY: test-e2e-upgrade
+test-e2e-upgrade: test-e2e-olm ## Run the upgrade-tagged E2E partition.

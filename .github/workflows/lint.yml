@@ -11,12 +11,18 @@ permissions:
 
 jobs:
   lint:
-    name: Run Linting
+    name: Lint (${{ matrix.tags || 'default' }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tags: ["", "integration", "upgrade"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@def8c394e3ad351a79bc93815e4a585520fe993b # v5
@@ -28,4 +34,19 @@ jobs:
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
           version: v2.15.0
-          args: --timeout=5m --issues-exit-code=0 --verbose
+          # Build with the go.mod toolchain, not a release binary built with an older Go.
+          install-mode: goinstall
+          args: --timeout=5m --issues-exit-code=1 --verbose --build-tags=${{ matrix.tags }}
+
+  lint-gate:
+    # Preserve the existing required-check name while requiring every partition
+    # to pass.
+    name: Run Linting
+    if: ${{ always() }}
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all lint checks to pass
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+        run: test "$LINT_RESULT" = success

@@ -18,8 +18,8 @@ var _ = Describe("DebouncedQueue", func() {
 	)
 
 	BeforeEach(func() {
-		testKey1 = types.NamespacedName{Name: "test1", Namespace: "default"}
-		testKey2 = types.NamespacedName{Name: "test2", Namespace: "default"}
+		testKey1 = types.NamespacedName{Name: "test1", Namespace: testNamespace}
+		testKey2 = types.NamespacedName{Name: "test2", Namespace: testNamespace}
 		duration = 50 * time.Millisecond
 		debouncedQueue = NewDebouncedQueue(DebouncedQueueConfig{
 			DebounceDuration: duration,

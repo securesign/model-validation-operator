@@ -1,3 +1,5 @@
+//go:build upgrade
+
 // Copyright 2025 The Sigstore Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");

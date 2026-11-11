@@ -1,3 +1,5 @@
+//go:build upgrade
+
 /*
 Copyright 2025.
 

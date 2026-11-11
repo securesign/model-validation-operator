@@ -121,8 +121,10 @@ func (p *podInterceptor) Handle(ctx context.Context, req admission.Request) admi
 
 	mergedModel := mergeModelWithAnnotations(logger, mv.Spec.Model, pod.Annotations)
 
-	args := []string{"verify"}
-	args = append(args, validationConfigToArgs(logger, mv.Spec.Config, mergedModel)...)
+	configArgs := validationConfigToArgs(logger, mv.Spec.Config, mergedModel)
+	args := make([]string, 0, len(configArgs)+2)
+	args = append(args, "verify")
+	args = append(args, configArgs...)
 	args = append(args, mergedModel.Path)
 
 	pp := pod.DeepCopy()

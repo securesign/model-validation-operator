@@ -30,6 +30,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+const (
+	testSigstoreMethod = "sigstore"
+	testOIDCIssuer     = "https://accounts.google.com"
+	trackedPodName     = "tracked-pod"
+	enabledAnnotation  = "true"
+)
+
 // expectIgnorePathsWithValues is a helper function to verify --ignore-paths flag followed by expected paths
 func expectIgnorePathsWithValues(args []string, expectedPaths ...string) {
 	Expect(args).To(ContainElement("--ignore-paths"), "--ignore-paths flag should be present")
@@ -79,9 +86,9 @@ var _ = Describe("Pod webhook", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:           Name,
 				Namespace:      Namespace,
-				ConfigType:     "sigstore",
+				ConfigType:     testSigstoreMethod,
 				CertIdentity:   "test@example.com",
-				CertOidcIssuer: "https://accounts.google.com",
+				CertOidcIssuer: testOIDCIssuer,
 				ModelPath:      "/path/to/model.onnx",
 				SignaturePath:  "/path/to/model.onnx.sig",
 			})
@@ -143,7 +150,7 @@ var _ = Describe("Pod webhook", func() {
 		It("Should track pod in ModelValidation status", func() {
 			By("create labeled pod")
 			instance := testutil.CreateTestPod(testutil.TestPodOptions{
-				Name:      "tracked-pod",
+				Name:      trackedPodName,
 				Namespace: Namespace,
 				Labels:    map[string]string{constants.ModelValidationLabel: Name},
 			})
@@ -153,7 +160,7 @@ var _ = Describe("Pod webhook", func() {
 			By("Waiting for pod to be injected")
 			found := &corev1.Pod{}
 			Eventually(ctx, func(ctx context.Context) []corev1.Container {
-				_ = k8sClient.Get(ctx, types.NamespacedName{Name: "tracked-pod", Namespace: Namespace}, found)
+				_ = k8sClient.Get(ctx, types.NamespacedName{Name: trackedPodName, Namespace: Namespace}, found)
 				return found.Spec.InitContainers
 			}, 5*time.Second).Should(HaveLen(1))
 
@@ -167,12 +174,12 @@ var _ = Describe("Pod webhook", func() {
 				return mv.Status.InjectedPodCount
 			}, 5*time.Second).Should(BeNumerically(">", 0))
 
-			Expect(mv.Status.AuthMethod).To(Equal("sigstore")) // Sigstore auth method configured in test
+			Expect(mv.Status.AuthMethod).To(Equal(testSigstoreMethod)) // Sigstore auth method configured in test
 			Expect(mv.Status.InjectedPods).ToNot(BeEmpty())
 
 			foundTrackedPod := false
 			for _, tp := range mv.Status.InjectedPods {
-				if tp.Name == "tracked-pod" {
+				if tp.Name == trackedPodName {
 					foundTrackedPod = true
 					break
 				}
@@ -197,9 +204,9 @@ var _ = Describe("Pod webhook", func() {
 			trustMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:            trustConfigName,
 				Namespace:       trustConfigNamespace,
-				ConfigType:      "sigstore",
+				ConfigType:      testSigstoreMethod,
 				CertIdentity:    "trust@example.com",
-				CertOidcIssuer:  "https://accounts.google.com",
+				CertOidcIssuer:  testOIDCIssuer,
 				TrustConfigPath: "/path/to/trust-config.json",
 			})
 			err = k8sClient.Create(ctx, trustMv)
@@ -267,9 +274,9 @@ var _ = Describe("Pod webhook", func() {
 			crdMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:                crdTestName,
 				Namespace:           crdTestNamespace,
-				ConfigType:          "sigstore",
+				ConfigType:          testSigstoreMethod,
 				CertIdentity:        "crd@example.com",
-				CertOidcIssuer:      "https://accounts.google.com",
+				CertOidcIssuer:      testOIDCIssuer,
 				ModelPath:           "/path/to/crd/model.onnx",
 				SignaturePath:       "/path/to/crd/model.onnx.sig",
 				IgnorePaths:         []string{"/data/temp", "/data/.git"},
@@ -331,9 +338,9 @@ var _ = Describe("Pod webhook", func() {
 			annotationsMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:           annotationsTestName,
 				Namespace:      annotationsTestNamespace,
-				ConfigType:     "sigstore",
+				ConfigType:     testSigstoreMethod,
 				CertIdentity:   "annotations@example.com",
-				CertOidcIssuer: "https://accounts.google.com",
+				CertOidcIssuer: testOIDCIssuer,
 				ModelPath:      "/path/to/annotations/model.onnx",
 				SignaturePath:  "/path/to/annotations/model.onnx.sig",
 			})
@@ -349,9 +356,9 @@ var _ = Describe("Pod webhook", func() {
 				Labels:    map[string]string{constants.ModelValidationLabel: annotationsTestName},
 				Annotations: map[string]string{
 					constants.IgnorePathsAnnotationKey:         "/tmp,/cache",
-					constants.IgnoreGitPathsAnnotationKey:      "true",
+					constants.IgnoreGitPathsAnnotationKey:      enabledAnnotation,
 					constants.IgnoreUnsignedFilesAnnotationKey: "false",
-					constants.AllowSymlinksAnnotationKey:       "true",
+					constants.AllowSymlinksAnnotationKey:       enabledAnnotation,
 				},
 			})
 			err = k8sClient.Create(ctx, annotationsPod)
@@ -397,9 +404,9 @@ var _ = Describe("Pod webhook", func() {
 			edgeMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:           edgeTestName,
 				Namespace:      edgeTestNamespace,
-				ConfigType:     "sigstore",
+				ConfigType:     testSigstoreMethod,
 				CertIdentity:   "edge@example.com",
-				CertOidcIssuer: "https://accounts.google.com",
+				CertOidcIssuer: testOIDCIssuer,
 				ModelPath:      "/path/to/edge/model.onnx",
 				SignaturePath:  "/path/to/edge/model.onnx.sig",
 			})
@@ -458,9 +465,9 @@ var _ = Describe("Pod webhook", func() {
 			allEmptyMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:           allEmptyTestName,
 				Namespace:      allEmptyTestNamespace,
-				ConfigType:     "sigstore",
+				ConfigType:     testSigstoreMethod,
 				CertIdentity:   "allempty@example.com",
-				CertOidcIssuer: "https://accounts.google.com",
+				CertOidcIssuer: testOIDCIssuer,
 				ModelPath:      "/path/to/allempty/model.onnx",
 				SignaturePath:  "/path/to/allempty/model.onnx.sig",
 			})
@@ -518,9 +525,9 @@ var _ = Describe("Pod webhook", func() {
 			whitespaceMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:           whitespaceTestName,
 				Namespace:      whitespaceTestNamespace,
-				ConfigType:     "sigstore",
+				ConfigType:     testSigstoreMethod,
 				CertIdentity:   "whitespace@example.com",
-				CertOidcIssuer: "https://accounts.google.com",
+				CertOidcIssuer: testOIDCIssuer,
 				ModelPath:      "/path/to/whitespace/model.onnx",
 				SignaturePath:  "/path/to/whitespace/model.onnx.sig",
 			})
@@ -585,9 +592,9 @@ var _ = Describe("Pod webhook", func() {
 			overrideMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:                overrideTestName,
 				Namespace:           overrideTestNamespace,
-				ConfigType:          "sigstore",
+				ConfigType:          testSigstoreMethod,
 				CertIdentity:        "override@example.com",
-				CertOidcIssuer:      "https://accounts.google.com",
+				CertOidcIssuer:      testOIDCIssuer,
 				ModelPath:           "/path/to/override/model.onnx",
 				SignaturePath:       "/path/to/override/model.onnx.sig",
 				IgnorePaths:         []string{"/crd/path1", "/crd/path2"},
@@ -607,9 +614,9 @@ var _ = Describe("Pod webhook", func() {
 				Labels:    map[string]string{constants.ModelValidationLabel: overrideTestName},
 				Annotations: map[string]string{
 					constants.IgnorePathsAnnotationKey:         "/annotation/path1,/annotation/path2",
-					constants.IgnoreGitPathsAnnotationKey:      "true",  // opposite of CRD
-					constants.IgnoreUnsignedFilesAnnotationKey: "false", // opposite of CRD
-					constants.AllowSymlinksAnnotationKey:       "true",  // opposite of CRD
+					constants.IgnoreGitPathsAnnotationKey:      enabledAnnotation, // opposite of CRD
+					constants.IgnoreUnsignedFilesAnnotationKey: "false",           // opposite of CRD
+					constants.AllowSymlinksAnnotationKey:       enabledAnnotation, // opposite of CRD
 				},
 			})
 			err = k8sClient.Create(ctx, overridePod)
@@ -662,9 +669,9 @@ var _ = Describe("Pod webhook", func() {
 			pullPolicyMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:           pullPolicyTestName,
 				Namespace:      pullPolicyTestNamespace,
-				ConfigType:     "sigstore",
+				ConfigType:     testSigstoreMethod,
 				CertIdentity:   "pullpolicy@example.com",
-				CertOidcIssuer: "https://accounts.google.com",
+				CertOidcIssuer: testOIDCIssuer,
 			})
 			pullPolicyMv.Spec.ImagePullPolicy = corev1.PullIfNotPresent
 			err = k8sClient.Create(ctx, pullPolicyMv)
@@ -715,9 +722,9 @@ var _ = Describe("Pod webhook", func() {
 			defaultResMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:           defaultResTestName,
 				Namespace:      defaultResTestNamespace,
-				ConfigType:     "sigstore",
+				ConfigType:     testSigstoreMethod,
 				CertIdentity:   "defaultres@example.com",
-				CertOidcIssuer: "https://accounts.google.com",
+				CertOidcIssuer: testOIDCIssuer,
 			})
 			err = k8sClient.Create(ctx, defaultResMv)
 			Expect(err).To(Not(HaveOccurred()))
@@ -770,9 +777,9 @@ var _ = Describe("Pod webhook", func() {
 			customResMv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:           customResTestName,
 				Namespace:      customResTestNamespace,
-				ConfigType:     "sigstore",
+				ConfigType:     testSigstoreMethod,
 				CertIdentity:   "customres@example.com",
-				CertOidcIssuer: "https://accounts.google.com",
+				CertOidcIssuer: testOIDCIssuer,
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("250m"),

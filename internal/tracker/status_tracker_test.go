@@ -16,6 +16,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	testNamespace  = testutil.DefaultNamespace
+	testModelName  = "test-mv"
+	sigstoreMethod = "sigstore"
+	pkiMethod      = "pki"
+)
+
 // NewStatusTrackerForTesting creates a status tracker with fast test-friendly defaults
 func NewStatusTrackerForTesting(client client.Client) StatusTracker {
 	return NewStatusTracker(client, StatusTrackerConfig{
@@ -87,8 +94,8 @@ var _ = Describe("StatusTracker", func() {
 	Context("when tracking pod injections", func() {
 		It("should track injected pods and update ModelValidation status", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 
 			statusTracker, fakeClient, mvKey = setupTestEnvironment(mv)
@@ -96,9 +103,9 @@ var _ = Describe("StatusTracker", func() {
 
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:       "test-pod",
-				Namespace:  "default",
+				Namespace:  testNamespace,
 				UID:        types.UID("test-uid"),
-				Labels:     map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:     map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers: []string{constants.ModelValidationFinalizer},
 			})
 
@@ -115,8 +122,8 @@ var _ = Describe("StatusTracker", func() {
 
 		It("should categorize pods correctly based on finalizer and CR existence", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 
 			statusTracker, fakeClient, mvKey = setupTestEnvironment(mv)
@@ -124,17 +131,17 @@ var _ = Describe("StatusTracker", func() {
 
 			injectedPod := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:       "injected-pod",
-				Namespace:  "default",
+				Namespace:  testNamespace,
 				UID:        types.UID("uid-1"),
-				Labels:     map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:     map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers: []string{constants.ModelValidationFinalizer},
 			})
 
 			uninjectedPod := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:      "uninjected-pod",
-				Namespace: "default",
+				Namespace: testNamespace,
 				UID:       types.UID("uid-2"),
-				Labels:    map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:    map[string]string{constants.ModelValidationLabel: testModelName},
 			})
 
 			err := statusTracker.ProcessPodEvent(ctx, injectedPod)
@@ -155,8 +162,8 @@ var _ = Describe("StatusTracker", func() {
 	Context("when removing pods", func() {
 		It("should remove pods from tracking and update status", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 
 			statusTracker, fakeClient, mvKey = setupTestEnvironment(mv)
@@ -164,16 +171,16 @@ var _ = Describe("StatusTracker", func() {
 
 			pod1 := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:       "test-pod-1",
-				Namespace:  "default",
+				Namespace:  testNamespace,
 				UID:        types.UID("test-uid-1"),
-				Labels:     map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:     map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers: []string{constants.ModelValidationFinalizer},
 			})
 			pod2 := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:       "test-pod-2",
-				Namespace:  "default",
+				Namespace:  testNamespace,
 				UID:        types.UID("test-uid-2"),
-				Labels:     map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:     map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers: []string{constants.ModelValidationFinalizer},
 			})
 
@@ -200,8 +207,8 @@ var _ = Describe("StatusTracker", func() {
 	Context("when managing ModelValidation tracking", func() {
 		It("should add and remove ModelValidations from tracking", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 			statusTracker, fakeClient, mvKey = setupTestEnvironment(mv)
 
@@ -216,37 +223,37 @@ var _ = Describe("StatusTracker", func() {
 
 		It("should handle AddModelValidation idempotently", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 			statusTracker, fakeClient, mvKey = setupTestEnvironment(mv)
-			mvKey = testutil.CreateTestNamespacedName("test-mv", "default")
+			mvKey = testutil.CreateTestNamespacedName(testModelName, testNamespace)
 
 			Expect(statusTracker.IsModelValidationTracked(mvKey)).To(BeFalse())
 
-			initialCount := getNamespaceCount(statusTracker, "default")
+			initialCount := getNamespaceCount(statusTracker, testNamespace)
 
 			statusTracker.AddModelValidation(ctx, mv)
 			Expect(statusTracker.IsModelValidationTracked(mvKey)).To(BeTrue())
 
-			firstCount := getNamespaceCount(statusTracker, "default")
+			firstCount := getNamespaceCount(statusTracker, testNamespace)
 			Expect(firstCount).To(Equal(initialCount + 1))
 
 			statusTracker.AddModelValidation(ctx, mv)
 			Expect(statusTracker.IsModelValidationTracked(mvKey)).To(BeTrue())
 
-			secondCount := getNamespaceCount(statusTracker, "default")
+			secondCount := getNamespaceCount(statusTracker, testNamespace)
 			Expect(secondCount).To(Equal(firstCount), "Second AddModelValidation should not increment namespace counter")
 
 			statusTracker.AddModelValidation(ctx, mv)
-			thirdCount := getNamespaceCount(statusTracker, "default")
+			thirdCount := getNamespaceCount(statusTracker, testNamespace)
 			Expect(thirdCount).To(Equal(firstCount), "Third AddModelValidation should not increment namespace counter")
 		})
 
 		It("should skip AddModelValidation when generation hasn't changed", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:      "test-mv-generation",
-				Namespace: "default",
+				Namespace: testNamespace,
 			})
 			statusTracker, _, mvKey = setupTestEnvironment(mv)
 
@@ -277,12 +284,12 @@ var _ = Describe("StatusTracker", func() {
 		})
 
 		It("should return false for untracked ModelValidation in GetObservedGeneration", func() {
-			untrackedKey := types.NamespacedName{Name: "untracked-mv", Namespace: "default"}
+			untrackedKey := types.NamespacedName{Name: "untracked-mv", Namespace: testNamespace}
 
 			// Create a statusTracker but don't add any ModelValidation
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:      "tracked-mv",
-				Namespace: "default",
+				Namespace: testNamespace,
 			})
 			statusTracker, _, _ = setupTestEnvironment(mv)
 
@@ -293,11 +300,11 @@ var _ = Describe("StatusTracker", func() {
 		It("should handle RemoveModelValidation idempotently and manage namespace counts correctly", func() {
 			mv1 := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:      "test-mv-1",
-				Namespace: "default",
+				Namespace: testNamespace,
 			})
 			mv2 := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:      "test-mv-2",
-				Namespace: "default",
+				Namespace: testNamespace,
 			})
 			mv3 := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
 				Name:      "test-mv-3",
@@ -306,15 +313,15 @@ var _ = Describe("StatusTracker", func() {
 			fakeClient = testutil.SetupFakeClientWithObjects(mv1, mv2, mv3)
 			statusTracker = NewStatusTrackerForTesting(fakeClient).(*StatusTrackerImpl)
 
-			mvKey1 := testutil.CreateTestNamespacedName("test-mv-1", "default")
-			mvKey2 := testutil.CreateTestNamespacedName("test-mv-2", "default")
+			mvKey1 := testutil.CreateTestNamespacedName("test-mv-1", testNamespace)
+			mvKey2 := testutil.CreateTestNamespacedName("test-mv-2", testNamespace)
 			mvKey3 := testutil.CreateTestNamespacedName("test-mv-3", "other-namespace")
 
 			statusTracker.AddModelValidation(ctx, mv1)
 			statusTracker.AddModelValidation(ctx, mv2)
 			statusTracker.AddModelValidation(ctx, mv3)
 
-			defaultCount := getNamespaceCount(statusTracker, "default")
+			defaultCount := getNamespaceCount(statusTracker, testNamespace)
 			otherCount := getNamespaceCount(statusTracker, "other-namespace")
 			Expect(defaultCount).To(Equal(2))
 			Expect(otherCount).To(Equal(1))
@@ -322,15 +329,15 @@ var _ = Describe("StatusTracker", func() {
 			statusTracker.RemoveModelValidation(mvKey1)
 			Expect(statusTracker.IsModelValidationTracked(mvKey1)).To(BeFalse())
 
-			defaultCountAfterFirst := getNamespaceCount(statusTracker, "default")
+			defaultCountAfterFirst := getNamespaceCount(statusTracker, testNamespace)
 			Expect(defaultCountAfterFirst).To(Equal(1))
 
 			statusTracker.RemoveModelValidation(mvKey1)
-			defaultCountAfterSecond := getNamespaceCount(statusTracker, "default")
+			defaultCountAfterSecond := getNamespaceCount(statusTracker, testNamespace)
 			Expect(defaultCountAfterSecond).To(Equal(1), "Second RemoveModelValidation should not decrement namespace counter")
 
 			statusTracker.RemoveModelValidation(mvKey2)
-			defaultExists := namespaceExists(statusTracker, "default")
+			defaultExists := namespaceExists(statusTracker, testNamespace)
 			otherCountFinal := getNamespaceCount(statusTracker, "other-namespace")
 			Expect(defaultExists).To(BeFalse(), "Namespace should be deleted when count reaches zero")
 			Expect(otherCountFinal).To(Equal(1), "Other namespace should be unaffected")
@@ -361,9 +368,9 @@ var _ = Describe("StatusTracker", func() {
 
 				pod := testutil.CreateTestPod(testutil.TestPodOptions{
 					Name:        expectedPodName,
-					Namespace:   "default",
+					Namespace:   testNamespace,
 					UID:         types.UID("uid-" + expectedPodName),
-					Labels:      map[string]string{constants.ModelValidationLabel: "test-mv"},
+					Labels:      map[string]string{constants.ModelValidationLabel: testModelName},
 					Finalizers:  []string{constants.ModelValidationFinalizer},
 					Annotations: podAnnotations,
 				})
@@ -385,30 +392,30 @@ var _ = Describe("StatusTracker", func() {
 				}
 			},
 			Entry("auth method mismatch - sigstore MV with pki pod",
-				testutil.TestModelValidationOptions{Name: "test-mv", Namespace: "default", ConfigType: "sigstore"},
-				"pki", "", int32(0), int32(1), "orphaned-pod"),
+				testutil.TestModelValidationOptions{Name: testModelName, Namespace: testNamespace, ConfigType: sigstoreMethod},
+				pkiMethod, "", int32(0), int32(1), "orphaned-pod"),
 			Entry("matching pki configuration",
-				testutil.TestModelValidationOptions{Name: "test-mv", Namespace: "default", ConfigType: "pki"},
-				"pki", "", int32(1), int32(0), "matching-pod"),
+				testutil.TestModelValidationOptions{Name: testModelName, Namespace: testNamespace, ConfigType: pkiMethod},
+				pkiMethod, "", int32(1), int32(0), "matching-pod"),
 			Entry("sigstore config hash drift",
 				testutil.TestModelValidationOptions{
-					Name: "test-mv", Namespace: "default", ConfigType: "sigstore",
+					Name: testModelName, Namespace: testNamespace, ConfigType: sigstoreMethod,
 					CertIdentity: "user@example.com", CertOidcIssuer: "https://accounts.google.com",
 				},
-				"sigstore", func() string {
+				sigstoreMethod, func() string {
 					oldMV := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-						Name: "test-mv", Namespace: "default", ConfigType: "sigstore",
+						Name: testModelName, Namespace: testNamespace, ConfigType: sigstoreMethod,
 						CertIdentity: "different@example.com", CertOidcIssuer: "https://accounts.google.com",
 					})
 					return oldMV.GetConfigHash()
 				}(), int32(0), int32(1), "drift-pod"),
 			Entry("pki config hash drift",
 				testutil.TestModelValidationOptions{
-					Name: "test-mv", Namespace: "default", ConfigType: "pki", CertificateCA: "/path/to/ca.crt",
+					Name: testModelName, Namespace: testNamespace, ConfigType: pkiMethod, CertificateCA: "/path/to/ca.crt",
 				},
-				"pki", func() string {
+				pkiMethod, func() string {
 					oldMV := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-						Name: "test-mv", Namespace: "default", ConfigType: "pki", CertificateCA: "/different/path/ca.crt",
+						Name: testModelName, Namespace: testNamespace, ConfigType: pkiMethod, CertificateCA: "/different/path/ca.crt",
 					})
 					return oldMV.GetConfigHash()
 				}(), int32(0), int32(1), "pki-drift-pod"),
@@ -417,9 +424,9 @@ var _ = Describe("StatusTracker", func() {
 		It("should handle pod deletion by name", func() {
 			// Create ModelValidation with Sigstore config
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:       "test-mv",
-				Namespace:  "default",
-				ConfigType: "sigstore",
+				Name:       testModelName,
+				Namespace:  testNamespace,
+				ConfigType: sigstoreMethod,
 			})
 
 			statusTracker, fakeClient, mvKey = setupTestEnvironment(mv)
@@ -427,9 +434,9 @@ var _ = Describe("StatusTracker", func() {
 
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:       "deleted-pod",
-				Namespace:  "default",
+				Namespace:  testNamespace,
 				UID:        types.UID("uid-deleted"),
-				Labels:     map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:     map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers: []string{constants.ModelValidationFinalizer},
 			})
 
@@ -453,19 +460,19 @@ var _ = Describe("StatusTracker", func() {
 
 		It("should re-evaluate existing pods when ModelValidation is updated", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:       "test-mv",
-				Namespace:  "default",
-				ConfigType: "sigstore",
+				Name:       testModelName,
+				Namespace:  testNamespace,
+				ConfigType: sigstoreMethod,
 			})
 
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:       "test-pod",
-				Namespace:  "default",
+				Namespace:  testNamespace,
 				UID:        types.UID("test-uid"),
-				Labels:     map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:     map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers: []string{constants.ModelValidationFinalizer},
 				Annotations: map[string]string{
-					constants.AuthMethodAnnotationKey: "sigstore",
+					constants.AuthMethodAnnotationKey: sigstoreMethod,
 				},
 			})
 
@@ -498,15 +505,15 @@ var _ = Describe("StatusTracker", func() {
 	Context("when handling error conditions and edge cases", func() {
 		It("should handle pod without required labels", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 			statusTracker, fakeClient, mvKey = setupTestEnvironment(mv)
 			statusTracker.AddModelValidation(ctx, mv)
 
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:      "unlabeled-pod",
-				Namespace: "default",
+				Namespace: testNamespace,
 				UID:       types.UID("unlabeled-uid"),
 				Labels:    map[string]string{}, // No ModelValidation label
 			})
@@ -520,15 +527,15 @@ var _ = Describe("StatusTracker", func() {
 
 		It("should handle pod with unknown ModelValidation", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 			statusTracker, fakeClient, mvKey = setupTestEnvironment(mv)
 			statusTracker.AddModelValidation(ctx, mv)
 
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:      "unknown-mv-pod",
-				Namespace: "default",
+				Namespace: testNamespace,
 				UID:       types.UID("unknown-uid"),
 				Labels:    map[string]string{constants.ModelValidationLabel: "unknown-mv"},
 			})
@@ -542,8 +549,8 @@ var _ = Describe("StatusTracker", func() {
 
 		It("should handle removal of non-existent pod by UID", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 			statusTracker, _, _ = setupTestEnvironment(mv)
 			statusTracker.AddModelValidation(ctx, mv)
@@ -554,31 +561,31 @@ var _ = Describe("StatusTracker", func() {
 
 		It("should handle removal of non-existent pod by name", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 			statusTracker, _, _ = setupTestEnvironment(mv)
 			statusTracker.AddModelValidation(ctx, mv)
 
-			podName := types.NamespacedName{Name: "non-existent-pod", Namespace: "default"}
+			podName := types.NamespacedName{Name: "non-existent-pod", Namespace: testNamespace}
 			err := statusTracker.RemovePodByName(ctx, podName)
 			Expect(err).NotTo(HaveOccurred()) // Should not error for non-existent pod
 		})
 
 		It("should handle pod with invalid annotations", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:       "test-mv",
-				Namespace:  "default",
-				ConfigType: "sigstore",
+				Name:       testModelName,
+				Namespace:  testNamespace,
+				ConfigType: sigstoreMethod,
 			})
 			statusTracker, fakeClient, mvKey = setupTestEnvironment(mv)
 			statusTracker.AddModelValidation(ctx, mv)
 
 			pod := testutil.CreateTestPod(testutil.TestPodOptions{
 				Name:       "invalid-pod",
-				Namespace:  "default",
+				Namespace:  testNamespace,
 				UID:        types.UID("invalid-uid"),
-				Labels:     map[string]string{constants.ModelValidationLabel: "test-mv"},
+				Labels:     map[string]string{constants.ModelValidationLabel: testModelName},
 				Finalizers: []string{constants.ModelValidationFinalizer},
 				Annotations: map[string]string{
 					constants.AuthMethodAnnotationKey: "invalid-auth-method",
@@ -596,8 +603,8 @@ var _ = Describe("StatusTracker", func() {
 
 		It("should handle empty UID gracefully", func() {
 			mv := testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-				Name:      "test-mv",
-				Namespace: "default",
+				Name:      testModelName,
+				Namespace: testNamespace,
 			})
 			statusTracker, _, _ = setupTestEnvironment(mv)
 			statusTracker.AddModelValidation(ctx, mv)
@@ -633,8 +640,8 @@ var _ = Describe("StatusTracker retry and debounce integration", func() {
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.Background())
 		mv = testutil.CreateTestModelValidation(testutil.TestModelValidationOptions{
-			Name:      "test-mv",
-			Namespace: "default",
+			Name:      testModelName,
+			Namespace: testNamespace,
 		})
 		// Setup failing environment with 2 failures before success
 		fakeClient = testutil.CreateFailingClientWithObjects(2, mv)
@@ -716,7 +723,7 @@ var _ = Describe("StatusTracker utility functions", func() {
 		It("should correctly identify equal statuses", func() {
 			status1 := v1alpha1.ModelValidationStatus{
 				InjectedPodCount: 2,
-				AuthMethod:       "sigstore",
+				AuthMethod:       sigstoreMethod,
 				InjectedPods: []v1alpha1.PodTrackingInfo{
 					{Name: "pod1", UID: "uid1"},
 					{Name: "pod2", UID: "uid2"},
@@ -724,7 +731,7 @@ var _ = Describe("StatusTracker utility functions", func() {
 			}
 			status2 := v1alpha1.ModelValidationStatus{
 				InjectedPodCount: 2,
-				AuthMethod:       "sigstore",
+				AuthMethod:       sigstoreMethod,
 				InjectedPods: []v1alpha1.PodTrackingInfo{
 					{Name: "pod1", UID: "uid1"},
 					{Name: "pod2", UID: "uid2"},

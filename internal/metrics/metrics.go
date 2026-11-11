@@ -7,6 +7,8 @@ import (
 )
 
 const (
+	metricNamespace = "model_validation_operator"
+
 	// Metric label names
 	labelNamespace          = "namespace"
 	labelModelValidation    = "model_validation"
@@ -31,7 +33,7 @@ var (
 	// ModelValidationPodCounts tracks the current number of pods in each state per ModelValidation
 	ModelValidationPodCounts = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "model_validation_operator",
+			Namespace: metricNamespace,
 			Name:      "modelvalidation_pod_count",
 			Help:      "Current number of pods tracked per ModelValidation by state",
 		},
@@ -41,7 +43,7 @@ var (
 	// PodStateTransitionsTotal tracks pod state transitions
 	PodStateTransitionsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "model_validation_operator",
+			Namespace: metricNamespace,
 			Name:      "pod_state_transitions_total",
 			Help:      "Total number of pod state transitions",
 		},
@@ -51,7 +53,7 @@ var (
 	// StatusUpdatesTotal tracks ModelValidation status updates
 	StatusUpdatesTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "model_validation_operator",
+			Namespace: metricNamespace,
 			Name:      "status_updates_total",
 			Help:      "Total number of ModelValidation status updates",
 		},
@@ -61,7 +63,7 @@ var (
 	// ConfigurationDriftEventsTotal tracks configuration drift events
 	ConfigurationDriftEventsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "model_validation_operator",
+			Namespace: metricNamespace,
 			Name:      "configuration_drift_events_total",
 			Help:      "Total number of configuration drift events detected",
 		},
@@ -72,7 +74,7 @@ var (
 	// Does not include authMethod for namespace-level tracking
 	ModelValidationCRsTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "model_validation_operator",
+			Namespace: metricNamespace,
 			Name:      "modelvalidation_crs_total",
 			Help:      "Total number of ModelValidation CRs being tracked per namespace",
 		},
@@ -82,7 +84,7 @@ var (
 	// StatusUpdateDuration tracks the duration of status update operations
 	StatusUpdateDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "model_validation_operator",
+			Namespace: metricNamespace,
 			Name:      "status_update_duration_seconds",
 			Help:      "Duration of ModelValidation status update operations",
 			Buckets:   prometheus.DefBuckets,
@@ -93,7 +95,7 @@ var (
 	// QueueSize tracks the current size of the status update queue
 	QueueSize = prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Namespace: "model_validation_operator",
+			Namespace: metricNamespace,
 			Name:      "status_update_queue_size",
 			Help:      "Current size of the status update queue",
 		},
@@ -102,7 +104,7 @@ var (
 	// RetryAttemptsTotal tracks retry attempts for status updates
 	RetryAttemptsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "model_validation_operator",
+			Namespace: metricNamespace,
 			Name:      "status_update_retry_attempts_total",
 			Help:      "Total number of status update retry attempts",
 		},

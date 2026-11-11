@@ -12,7 +12,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const networkPolicyName = "controller-manager"
+const (
+	networkPolicyName = "controller-manager"
+	operatorAppName   = "model-validation-operator"
+)
 
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;create;update;patch
 
@@ -29,8 +32,8 @@ func InstallNetworkPolicy(ctx context.Context, c client.Client, namespace string
 
 	result, err := controllerutil.CreateOrUpdate(ctx, c, np, func() error {
 		np.Labels = map[string]string{
-			"app.kubernetes.io/name":       "model-validation-operator",
-			"app.kubernetes.io/managed-by": "model-validation-operator",
+			"app.kubernetes.io/name":       operatorAppName,
+			"app.kubernetes.io/managed-by": operatorAppName,
 		}
 		np.Spec = networkPolicySpec()
 		return nil
@@ -60,7 +63,7 @@ func networkPolicySpec() networkingv1.NetworkPolicySpec {
 		PodSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
 				"control-plane":          "controller-manager",
-				"app.kubernetes.io/name": "model-validation-operator",
+				"app.kubernetes.io/name": operatorAppName,
 			},
 		},
 		PolicyTypes: []networkingv1.PolicyType{
