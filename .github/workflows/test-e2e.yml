@@ -1,10 +1,21 @@
 name: E2E Tests
 
+# Product image and pipeline changes are validated by Konflux.
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "release-*" ]
+    paths-ignore:
+      - "Dockerfile.model-validation-agent.rh"
+      - "Dockerfile.model-validation-bundle.rh"
+      - "Dockerfile.model-validation.rh"
+      - ".tekton/**"
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "release-*" ]
+    paths-ignore:
+      - "Dockerfile.model-validation-agent.rh"
+      - "Dockerfile.model-validation-bundle.rh"
+      - "Dockerfile.model-validation.rh"
+      - ".tekton/**"
 
 env:
   MODEL_TRANSPARENCY_IMG: quay.io/securesign/model-transparency@sha256:896c2e61b88dd29eb38ff6ae3ae10320fcad46169c52c5019d52e5bd64a2f637
