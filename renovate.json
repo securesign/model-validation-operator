@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>securesign/renovate-config//org-inherited-config.json"
+  ],
+  "enabledManagers": [
+    "dockerfile",
+    "gomod",
+    "tekton",
+    "custom.regex"
+  ],
+  "ignorePaths": [
+    "Dockerfile{,}",
+    "Dockerfile.agent",
+    "bundle.Dockerfile",
+    ".devcontainer/**",
+    ".github/workflows/**",
+    "testdata/**"
+  ],
+  "packageRules": [
+    {
+      "description": "Disable GitHub Actions updates managed by Dependabot",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "enabled": false
+    }
+  ]
+}
