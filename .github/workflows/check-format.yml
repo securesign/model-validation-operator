@@ -1,8 +1,21 @@
 name: Check Format
 
+# Product image and pipeline changes are validated by Konflux.
 on:
   push:
+    branches: [ "main", "release-*" ]
+    paths-ignore:
+      - "Dockerfile.model-validation-agent.rh"
+      - "Dockerfile.model-validation-bundle.rh"
+      - "Dockerfile.model-validation.rh"
+      - ".tekton/**"
   pull_request:
+    branches: [ "main", "release-*" ]
+    paths-ignore:
+      - "Dockerfile.model-validation-agent.rh"
+      - "Dockerfile.model-validation-bundle.rh"
+      - "Dockerfile.model-validation.rh"
+      - ".tekton/**"
 
 jobs:
   check-format:
